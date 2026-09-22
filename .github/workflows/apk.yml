@@ -1,0 +1,76 @@
+name: APK Android
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  workflow_dispatch:
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificar tipos
+        run: npm run typecheck
+
+      - name: Pruebas
+        run: npm test
+
+      - name: Numerar versión con el número de ejecución
+        run: |
+          node -e '
+            const fs = require("fs");
+            const app = JSON.parse(fs.readFileSync("app.json", "utf8"));
+            app.expo.android.versionCode = Number(process.env.GITHUB_RUN_NUMBER);
+            fs.writeFileSync("app.json", JSON.stringify(app, null, 2));
+          '
+
+      - name: Generar proyecto Android
+        run: npx expo prebuild --platform android --no-install
+
+      # La firma usa el debug.keystore fijo de la plantilla de Expo, así cada APK
+      # nuevo se instala encima del anterior sin borrar los datos.
+      - name: Compilar APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+
+      - name: Renombrar APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk finanzas.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: finanzas-apk
+          path: finanzas.apk
+
+      - name: Publicar en la release "apk-latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest --cleanup-tag --yes || true
+          gh release create apk-latest finanzas.apk \
+            --target "$GITHUB_SHA" \
+            --title "Finanzas · build #$GITHUB_RUN_NUMBER" \
+            --notes "APK generado desde ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Descárgalo desde el teléfono e instálalo."

@@ -1,1 +1,68 @@
-# Finanzas-Personales-
+# Finanzas Personales
+
+App Android personal para controlar saldos en **USD efectivo, Bolívares y USDT**, con registro de
+gastos/ingresos, transferencias entre billeteras, metas de ahorro y conversión con tasas BCV y
+paralelo. Funciona sin internet (offline-first, datos en SQLite dentro del teléfono).
+
+Especificación completa: ver el documento del proyecto (fases 1–5).
+
+## Estado
+
+| Fase | Alcance | Estado |
+| --- | --- | --- |
+| 1 | Expo + esquema SQLite + CRUD de billeteras | ✅ |
+| 2 | Registro de gastos, ingresos y transferencias | ⏳ |
+| 3 | Tasas BCV / paralelo (ve.dolarapi.com) con caché y calculadora | ⏳ |
+| 4 | Dashboard con gráficas y metas de ahorro | ⏳ |
+| 5 | Pulido y APK final | ⏳ |
+
+## Instalar en el teléfono (sin PC)
+
+Cada push a `main` o a una rama `claude/**` ejecuta el workflow **APK Android**, que compila la app
+y la publica en la release **`apk-latest`** del repositorio.
+
+1. En el teléfono, abre el repo en GitHub → **Releases** → `apk-latest`.
+2. Descarga `finanzas.apk` y ábrelo. Android pedirá permitir "instalar apps de origen desconocido"
+   para tu navegador o gestor de archivos.
+3. Las versiones nuevas se instalan encima de la anterior **sin perder datos** (todas se firman con
+   la misma clave).
+
+El APK es para procesadores ARM de 64 bits (prácticamente todos los Android actuales).
+
+## Desarrollo
+
+```bash
+npm install
+npm start            # servidor de desarrollo (Expo)
+npm run typecheck    # TypeScript (app + pruebas)
+npm test             # pruebas de la capa de datos con SQLite real (node:sqlite)
+```
+
+Las dependencias nativas deben ir en versiones compatibles con el SDK de Expo
+(`npx expo install <paquete>`).
+
+## Estructura
+
+```
+src/
+  app/                  rutas (Expo Router): cada archivo es una pantalla
+  components/           componentes de UI
+  db/                   esquema, migraciones y consultas SQLite
+  lib/                  utilidades (monedas, tema)
+tests/                  pruebas con node:test
+.github/workflows/      compilación del APK
+```
+
+## Decisiones de diseño
+
+- **Montos en céntimos (enteros)** para que las sumas de saldos no acumulen errores de punto
+  flotante. Las tasas de cambio sí son decimales.
+- **El saldo de una billetera se calcula**: saldo inicial + movimientos. No se guarda un saldo
+  aparte que pueda desincronizarse.
+- **Transferencias** (ej. vender USDT por Bs.) restan de una billetera y suman a otra en su propia
+  moneda, sin contar como ingreso ni gasto.
+- **Metas de ahorro**: abonar descuenta el dinero de una billetera (queda apartado); retirar lo
+  devuelve. El monto acumulado de la meta se calcula a partir de esos movimientos.
+- **Billeteras con movimientos** no se borran ni cambian de moneda: se archivan, para no romper el
+  historial.
+- Formato de números venezolano: `Bs. 1.234,56`. Al escribir montos se acepta coma o punto decimal.
