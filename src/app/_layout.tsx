@@ -4,6 +4,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
+import { TasasProvider } from '../components/TasasProvider';
 import { migrar, NOMBRE_BD } from '../db/esquema';
 import { temaClaro, temaOscuro } from '../lib/tema';
 
@@ -12,6 +13,7 @@ export default function RootLayout() {
 
   return (
     <SQLiteProvider databaseName={NOMBRE_BD} onInit={migrar}>
+      <TasasProvider>
       <PaperProvider theme={tema}>
         <StatusBar style={tema.dark ? 'light' : 'dark'} />
         <Stack
@@ -25,6 +27,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
       </PaperProvider>
+      </TasasProvider>
     </SQLiteProvider>
   );
 }

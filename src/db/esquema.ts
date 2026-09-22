@@ -97,6 +97,16 @@ const MIGRACIONES: string[] = [
     ('Regalos', 'INGRESO', '#C0CA33', 'gift'),
     ('Otros ingresos', 'INGRESO', '#9E9D24', 'dots-horizontal');
   `,
+  // v2: origen de cada tasa (API o escrita a mano), cuándo se consultó, y preferencias de la app.
+  `
+  ALTER TABLE tasas_cache ADD COLUMN consultada_en TEXT;
+  ALTER TABLE tasas_cache ADD COLUMN origen TEXT NOT NULL DEFAULT 'API' CHECK (origen IN ('API', 'MANUAL'));
+
+  CREATE TABLE preferencias (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL
+  );
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

@@ -40,6 +40,14 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="swap-vertical" color={color} size={size} />,
         }}
       />
+      <Tabs.Screen
+        name="tasas"
+        options={{
+          title: 'Tasas',
+          headerTitle: 'Tasas y calculadora',
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calculator-variant" color={color} size={size} />,
+        }}
+      />
     </Tabs>
   );
 }

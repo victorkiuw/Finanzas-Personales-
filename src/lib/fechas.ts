@@ -55,3 +55,13 @@ export function rangoDias(desde: Date, hasta: Date): { desde: string; hasta: str
   fin.setDate(fin.getDate() + 1);
   return { desde: inicioDelDia(desde).toISOString(), hasta: fin.toISOString() };
 }
+
+/** "hace un momento", "hace 5 min", "hace 3 h", o la fecha corta con hora si es de otro día. */
+export function haceCuanto(iso: string, ahora: Date = new Date()): string {
+  const minutos = Math.floor((ahora.getTime() - Date.parse(iso)) / 60_000);
+  if (minutos < 1) return 'hace un momento';
+  if (minutos < 60) return `hace ${minutos} min`;
+  if (minutos < 24 * 60) return `hace ${Math.floor(minutos / 60)} h`;
+  const d = new Date(iso);
+  return `el ${formatearFechaCorta(d)} ${formatearHora(iso)}`;
+}

@@ -28,8 +28,10 @@ import {
 } from '../db/movimientos';
 import { formatearFechaCorta, formatearHora } from '../lib/fechas';
 import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { calcularTasa, formatearTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { NOMBRE_PAR, PARES } from '../lib/api-tasas';
 import { SelectorBilletera } from './SelectorBilletera';
+import { useTasas } from './TasasProvider';
 
 interface Props {
   /** Si no se indica, se crea un movimiento nuevo. */
@@ -47,6 +49,7 @@ const TIPOS: { value: TipoMovimiento; label: string; icon: string }[] = [
 export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInicial }: Props) {
   const db = useSQLiteContext();
   const tema = useTheme();
+  const { tasas } = useTasas();
   const editando = id !== undefined;
 
   const [cargando, setCargando] = useState(true);
@@ -340,6 +343,15 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
                   style={styles.flex}
                   right={<TextInput.Affix text={INFO_MONEDA[destino.moneda].corto} />}
                 />
+              </View>
+            )}
+            {conCambio && hayBolivar(origen.moneda, destino.moneda) && (
+              <View style={styles.chips}>
+                {PARES.filter((p) => tasas[p]).map((p) => (
+                  <Chip key={p} compact icon="lightning-bolt" onPress={() => cambiarTasa(tasaATexto(tasas[p]!.tasa))}>
+                    {`${NOMBRE_PAR[p]} ${formatearTasa(tasas[p]!.tasa)}`}
+                  </Chip>
+                ))}
               </View>
             )}
             {conCambio && recibido !== null && recibido > 0 && (

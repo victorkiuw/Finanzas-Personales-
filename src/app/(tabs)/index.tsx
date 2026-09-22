@@ -2,16 +2,12 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Card, FAB, List, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, FAB, List, Text, useTheme } from 'react-native-paper';
 
+import { CintaTasas } from '../../components/CintaTasas';
+import { ResumenSaldo } from '../../components/ResumenSaldo';
 import { TarjetaBilletera } from '../../components/TarjetaBilletera';
-import {
-  crearBilleterasSugeridas,
-  listarBilleteras,
-  totalesPorMoneda,
-  type Billetera,
-} from '../../db/billeteras';
-import { formatearMonto, MONEDAS } from '../../lib/moneda';
+import { crearBilleterasSugeridas, listarBilleteras, type Billetera } from '../../db/billeteras';
 
 export default function PantallaBilleteras() {
   const db = useSQLiteContext();
@@ -48,7 +44,6 @@ export default function PantallaBilleteras() {
 
   const activas = billeteras.filter((b) => !b.archivada);
   const archivadas = billeteras.filter((b) => b.archivada);
-  const totales = totalesPorMoneda(activas);
   const abrir = (b: Billetera) => router.push(`/billetera/${b.id}`);
 
   return (
@@ -59,27 +54,10 @@ export default function PantallaBilleteras() {
         renderItem={({ item }) => <TarjetaBilletera billetera={item} onPress={() => abrir(item)} />}
         contentContainerStyle={{ paddingTop: 8, paddingBottom: 96 }}
         ListHeaderComponent={
-          activas.length > 0 ? (
-            <Card mode="contained" style={[styles.resumen, { backgroundColor: tema.colors.primaryContainer }]}>
-              <Card.Content>
-                <Text variant="labelLarge" style={{ color: tema.colors.onPrimaryContainer }}>
-                  Saldo por moneda
-                </Text>
-                {MONEDAS.filter((m) => totales[m] !== undefined).map((m) => (
-                  <Text
-                    key={m}
-                    variant="headlineSmall"
-                    style={[styles.total, { color: tema.colors.onPrimaryContainer }]}
-                  >
-                    {formatearMonto(totales[m]!, m)}
-                  </Text>
-                ))}
-                <Text variant="bodySmall" style={{ color: tema.colors.onPrimaryContainer, marginTop: 4 }}>
-                  El total consolidado con tasas BCV / paralelo llega en la fase 3.
-                </Text>
-              </Card.Content>
-            </Card>
-          ) : null
+          <>
+            <CintaTasas />
+            {activas.length > 0 && <ResumenSaldo billeteras={activas} />}
+          </>
         }
         ListEmptyComponent={
           <View style={styles.vacio}>
@@ -127,8 +105,6 @@ export default function PantallaBilleteras() {
 
 const styles = StyleSheet.create({
   cargando: { marginTop: 48 },
-  resumen: { marginHorizontal: 16, marginBottom: 16 },
-  total: { fontVariant: ['tabular-nums'], fontWeight: '600', marginTop: 4 },
   vacio: { padding: 24, gap: 12, marginTop: 32 },
   centrado: { textAlign: 'center' },
   fab: { position: 'absolute', right: 16 },

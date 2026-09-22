@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { claveDia, formatearDia, rangoDias, rangoMes } from '../src/lib/fechas';
+import { claveDia, formatearDia, haceCuanto, rangoDias, rangoMes } from '../src/lib/fechas';
 
 // Las pruebas se ejecutan con TZ=America/Caracas (ver script "test").
 
@@ -25,4 +25,13 @@ test('rangos de mes y de días', () => {
   const d = rangoDias(new Date(2026, 8, 1, 15), new Date(2026, 8, 3, 8));
   assert.equal(d.desde, new Date(2026, 8, 1).toISOString());
   assert.equal(d.hasta, new Date(2026, 8, 4).toISOString());
+});
+
+test('haceCuanto', () => {
+  const ahora = new Date(2026, 8, 22, 12, 0);
+  const antes = (min: number) => new Date(ahora.getTime() - min * 60_000).toISOString();
+  assert.equal(haceCuanto(antes(0), ahora), 'hace un momento');
+  assert.equal(haceCuanto(antes(5), ahora), 'hace 5 min');
+  assert.equal(haceCuanto(antes(180), ahora), 'hace 3 h');
+  assert.equal(haceCuanto(new Date(2026, 8, 20, 9, 5).toISOString(), ahora), 'el 20 sep 2026 09:05');
 });

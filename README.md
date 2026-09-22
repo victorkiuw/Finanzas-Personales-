@@ -12,7 +12,7 @@ Especificación completa: ver el documento del proyecto (fases 1–5).
 | --- | --- | --- |
 | 1 | Expo + esquema SQLite + CRUD de billeteras | ✅ |
 | 2 | Registro de gastos, ingresos y transferencias | ✅ |
-| 3 | Tasas BCV / paralelo (ve.dolarapi.com) con caché y calculadora | ⏳ |
+| 3 | Tasas BCV / paralelo (ve.dolarapi.com) con caché y calculadora | ✅ |
 | 4 | Dashboard con gráficas y metas de ahorro | ⏳ |
 | 5 | Pulido y APK final | ⏳ |
 
@@ -65,4 +65,9 @@ tests/                  pruebas con node:test
   devuelve. El monto acumulado de la meta se calcula a partir de esos movimientos.
 - **Billeteras con movimientos** no se borran ni cambian de moneda: se archivan, para no romper el
   historial.
+- **Tasas**: BCV (oficial) y paralelo, de `ve.dolarapi.com/v1/dolares`. Se guardan en SQLite y se
+  refrescan solas cada 30 min si hay internet; sin conexión se usa la última guardada y se muestra
+  cuándo se consultó. Cualquier tasa se puede corregir a mano.
+- **Conversión**: USD y USDT se consideran equivalentes (1:1); el bolívar se convierte con la tasa
+  de referencia elegida (BCV o paralelo). El patrimonio total se muestra en USD o Bs.
 - Formato de números venezolano: `Bs. 1.234,56`. Al escribir montos se acepta coma o punto decimal.

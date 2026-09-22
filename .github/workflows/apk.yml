@@ -7,7 +7,8 @@ on:
 
 concurrency:
   group: apk-${{ github.ref }}
-  cancel-in-progress: true
+  # Una compilación nueva espera a que termine la anterior en vez de cancelarla.
+  cancel-in-progress: false
 
 permissions:
   contents: write
