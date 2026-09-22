@@ -11,7 +11,7 @@ Especificación completa: ver el documento del proyecto (fases 1–5).
 | Fase | Alcance | Estado |
 | --- | --- | --- |
 | 1 | Expo + esquema SQLite + CRUD de billeteras | ✅ |
-| 2 | Registro de gastos, ingresos y transferencias | ⏳ |
+| 2 | Registro de gastos, ingresos y transferencias | ✅ |
 | 3 | Tasas BCV / paralelo (ve.dolarapi.com) con caché y calculadora | ⏳ |
 | 4 | Dashboard con gráficas y metas de ahorro | ⏳ |
 | 5 | Pulido y APK final | ⏳ |

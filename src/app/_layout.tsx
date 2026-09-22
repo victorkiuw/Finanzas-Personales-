@@ -21,7 +21,9 @@ export default function RootLayout() {
             headerShadowVisible: false,
             contentStyle: { backgroundColor: tema.colors.background },
           }}
-        />
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        </Stack>
       </PaperProvider>
     </SQLiteProvider>
   );

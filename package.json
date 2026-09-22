@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
+    "@react-native-community/datetimepicker": "9.1.0",
     "expo": "~57.0.24",
     "expo-constants": "~57.0.19",
     "expo-linking": "~57.0.10",
@@ -28,7 +29,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tests",
-    "test": "node --no-warnings --import tsx --test tests/*.test.ts"
+    "test": "TZ=America/Caracas node --no-warnings --import tsx --test tests/*.test.ts"
   },
   "private": true
 }

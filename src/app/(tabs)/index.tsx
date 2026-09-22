@@ -1,23 +1,21 @@
-import { router, Stack, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityIndicator, Button, Card, FAB, List, Text, useTheme } from 'react-native-paper';
 
-import { TarjetaBilletera } from '../components/TarjetaBilletera';
+import { TarjetaBilletera } from '../../components/TarjetaBilletera';
 import {
   crearBilleterasSugeridas,
   listarBilleteras,
   totalesPorMoneda,
   type Billetera,
-} from '../db/billeteras';
-import { formatearMonto, MONEDAS } from '../lib/moneda';
+} from '../../db/billeteras';
+import { formatearMonto, MONEDAS } from '../../lib/moneda';
 
 export default function PantallaBilleteras() {
   const db = useSQLiteContext();
   const tema = useTheme();
-  const insets = useSafeAreaInsets();
   const [billeteras, setBilleteras] = useState<Billetera[] | null>(null);
   const [verArchivadas, setVerArchivadas] = useState(false);
   const [creando, setCreando] = useState(false);
@@ -55,12 +53,11 @@ export default function PantallaBilleteras() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Mis billeteras' }} />
       <FlatList
         data={activas}
         keyExtractor={(b) => String(b.id)}
         renderItem={({ item }) => <TarjetaBilletera billetera={item} onPress={() => abrir(item)} />}
-        contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 96 }}
+        contentContainerStyle={{ paddingTop: 8, paddingBottom: 96 }}
         ListHeaderComponent={
           activas.length > 0 ? (
             <Card mode="contained" style={[styles.resumen, { backgroundColor: tema.colors.primaryContainer }]}>
@@ -116,12 +113,14 @@ export default function PantallaBilleteras() {
           ) : null
         }
       />
-      <FAB
-        icon="plus"
-        label="Billetera"
-        style={[styles.fab, { bottom: insets.bottom + 16 }]}
-        onPress={() => router.push('/billetera/nueva')}
-      />
+      {activas.length > 0 && (
+        <FAB
+          icon="plus"
+          label="Movimiento"
+          style={[styles.fab, { bottom: 16 }]}
+          onPress={() => router.push('/movimiento/nuevo')}
+        />
+      )}
     </>
   );
 }
