@@ -119,6 +119,15 @@ const MIGRACIONES: string[] = [
   INSERT INTO historial_tasas (par, dia, tasa)
     SELECT par, date(COALESCE(consultada_en, ultima_actualizacion), 'localtime'), tasa FROM tasas_cache;
   `,
+  // v4: comisión configurable por billetera (Pago Móvil), categorías editables/archivables y
+  // enlace de cada comisión con el movimiento que la originó (se borra junto con él).
+  `
+  ALTER TABLE billeteras ADD COLUMN comision_porcentaje REAL NOT NULL DEFAULT 0 CHECK (comision_porcentaje >= 0);
+  ALTER TABLE billeteras ADD COLUMN comision_minima INTEGER NOT NULL DEFAULT 0 CHECK (comision_minima >= 0);
+  ALTER TABLE categorias ADD COLUMN archivada INTEGER NOT NULL DEFAULT 0 CHECK (archivada IN (0, 1));
+  ALTER TABLE transacciones ADD COLUMN comision_de INTEGER REFERENCES transacciones (id) ON DELETE CASCADE;
+  CREATE INDEX idx_transacciones_comision ON transacciones (comision_de);
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

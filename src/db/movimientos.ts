@@ -1,7 +1,8 @@
 import type { Moneda } from '../lib/moneda';
 import { calcularTasa } from '../lib/tasa';
 import { ErrorValidacion } from './billeteras';
-import type { BaseDatos, ValorSQL } from './tipos';
+import { categoriaComisiones } from './categorias';
+import { enTransaccion, type BaseDatos, type ValorSQL } from './tipos';
 
 /** Tipos que se registran desde el formulario de movimientos (las metas llegan en la fase 4). */
 export type TipoMovimiento = 'GASTO' | 'INGRESO' | 'TRANSFERENCIA';
@@ -20,6 +21,12 @@ export interface DatosMovimiento {
   /** Céntimos en la moneda de la billetera destino (solo transferencias). */
   monto_destino?: number | null;
   nota?: string | null;
+  /**
+   * Comisión bancaria en céntimos de la billetera origen (solo gastos y transferencias).
+   * Se guarda como un gasto aparte en "Comisiones" vinculado a este movimiento.
+   * Al editar: undefined la deja como está, 0/null la quita.
+   */
+  comision?: number | null;
 }
 
 export interface Movimiento {
@@ -43,6 +50,10 @@ export interface Movimiento {
   meta_id: number | null;
   meta_nombre: string | null;
   meta_moneda: Moneda | null;
+  /** Si este movimiento es la comisión de otro, el id de ese otro. */
+  comision_de: number | null;
+  /** Comisión vinculada a este movimiento, en céntimos de la billetera origen. */
+  comision: number | null;
 }
 
 export interface FiltroMovimientos {
@@ -66,7 +77,8 @@ const SELECT_MOVIMIENTO = `
     c.nombre AS categoria_nombre, c.color_hex AS categoria_color, c.icono AS categoria_icono,
     t.billetera_origen_id, o.nombre AS origen_nombre, o.moneda AS origen_moneda,
     t.billetera_destino_id, d.nombre AS destino_nombre, d.moneda AS destino_moneda,
-    t.monto_destino, t.tasa_cambio, t.meta_id, m.nombre AS meta_nombre, m.moneda AS meta_moneda
+    t.monto_destino, t.tasa_cambio, t.meta_id, m.nombre AS meta_nombre, m.moneda AS meta_moneda,
+    t.comision_de, (SELECT SUM(c.monto) FROM transacciones c WHERE c.comision_de = t.id) AS comision
   FROM transacciones t
   JOIN billeteras o ON o.id = t.billetera_origen_id
   LEFT JOIN billeteras d ON d.id = t.billetera_destino_id
@@ -142,15 +154,52 @@ async function preparar(db: BaseDatos, d: DatosMovimiento, idActual?: number) {
   return [d.tipo, d.monto, d.fecha, d.categoria_id, d.billetera_origen_id, null, null, null, nota];
 }
 
+const NOTA_COMISION = 'Comisión bancaria';
+
+function validarComision(d: DatosMovimiento): number | null | undefined {
+  if (d.comision === undefined) return undefined;
+  if (!d.comision) return null;
+  if (d.tipo === 'INGRESO') throw new ErrorValidacion('Los ingresos no llevan comisión.');
+  if (!montoValido(d.comision)) throw new ErrorValidacion('La comisión no es válida.');
+  return d.comision;
+}
+
+/** Crea, actualiza o quita el gasto de comisión vinculado a un movimiento. */
+async function sincronizarComision(db: BaseDatos, padreId: number, d: DatosMovimiento, comision: number | null) {
+  const existente = await db.getFirstAsync<{ id: number }>(`SELECT id FROM transacciones WHERE comision_de = ?`, [padreId]);
+  if (!comision) {
+    if (existente) await db.runAsync(`DELETE FROM transacciones WHERE id = ?`, [existente.id]);
+    return;
+  }
+  if (existente) {
+    await db.runAsync(`UPDATE transacciones SET monto = ?, fecha = ?, billetera_origen_id = ? WHERE id = ?`, [
+      comision,
+      d.fecha,
+      d.billetera_origen_id,
+      existente.id,
+    ]);
+    return;
+  }
+  await db.runAsync(
+    `INSERT INTO transacciones (tipo, monto, fecha, categoria_id, billetera_origen_id, nota, comision_de)
+     VALUES ('GASTO', ?, ?, ?, ?, ?, ?)`,
+    [comision, d.fecha, await categoriaComisiones(db), d.billetera_origen_id, NOTA_COMISION, padreId],
+  );
+}
+
 export async function crearMovimiento(db: BaseDatos, datos: DatosMovimiento): Promise<number> {
   const valores = await preparar(db, datos);
-  const r = await db.runAsync(
-    `INSERT INTO transacciones
-      (tipo, monto, fecha, categoria_id, billetera_origen_id, billetera_destino_id, monto_destino, tasa_cambio, nota)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    valores,
-  );
-  return r.lastInsertRowId;
+  const comision = validarComision(datos);
+  return enTransaccion(db, async () => {
+    const r = await db.runAsync(
+      `INSERT INTO transacciones
+        (tipo, monto, fecha, categoria_id, billetera_origen_id, billetera_destino_id, monto_destino, tasa_cambio, nota)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      valores,
+    );
+    if (comision) await sincronizarComision(db, r.lastInsertRowId, datos, comision);
+    return r.lastInsertRowId;
+  });
 }
 
 export async function actualizarMovimiento(db: BaseDatos, id: number, datos: DatosMovimiento): Promise<void> {
@@ -160,13 +209,20 @@ export async function actualizarMovimiento(db: BaseDatos, id: number, datos: Dat
     throw new ErrorValidacion('Los movimientos de metas se editan desde el módulo de ahorros.');
   }
   const valores = await preparar(db, datos, id);
-  await db.runAsync(
-    `UPDATE transacciones SET
-      tipo = ?, monto = ?, fecha = ?, categoria_id = ?, billetera_origen_id = ?,
-      billetera_destino_id = ?, monto_destino = ?, tasa_cambio = ?, nota = ?
-     WHERE id = ?`,
-    [...valores, id],
-  );
+  let comision = validarComision(datos);
+  // Un ingreso no lleva comisión: si el movimiento pasa a ser ingreso, se quita la que tuviera.
+  if (datos.tipo === 'INGRESO') comision = null;
+  await enTransaccion(db, async () => {
+    await db.runAsync(
+      `UPDATE transacciones SET
+        tipo = ?, monto = ?, fecha = ?, categoria_id = ?, billetera_origen_id = ?,
+        billetera_destino_id = ?, monto_destino = ?, tasa_cambio = ?, nota = ?
+       WHERE id = ?`,
+      [...valores, id],
+    );
+    // Si no se indica la comisión, la vinculada sigue igual pero acompaña la billetera y fecha del movimiento.
+    await sincronizarComision(db, id, datos, comision === undefined ? actual.comision : comision);
+  });
 }
 
 export async function eliminarMovimiento(db: BaseDatos, id: number): Promise<void> {

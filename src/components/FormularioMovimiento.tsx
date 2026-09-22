@@ -1,7 +1,7 @@
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
@@ -9,6 +9,7 @@ import {
   Chip,
   HelperText,
   SegmentedButtons,
+  Switch,
   Text,
   TextInput,
   useTheme,
@@ -30,6 +31,7 @@ import { formatearFechaCorta, formatearHora } from '../lib/fechas';
 import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
 import { calcularTasa, formatearTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { NOMBRE_PAR, PARES } from '../lib/api-tasas';
+import { calcularComision, describirComision, tieneComision } from '../lib/comision';
 import { SelectorBilletera } from './SelectorBilletera';
 import { useTasas } from './TasasProvider';
 
@@ -66,6 +68,10 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
   const [tasaTexto, setTasaTexto] = useState('');
   const [fecha, setFecha] = useState(() => new Date());
   const [nota, setNota] = useState('');
+  // null = decide la configuración de la billetera; true/false = el usuario lo cambió.
+  const [usarComision, setUsarComision] = useState<boolean | null>(null);
+  // Vacío = se calcula sola con la configuración de la billetera.
+  const [comisionTexto, setComisionTexto] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -73,7 +79,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
     (async () => {
       const [todas, cats] = await Promise.all([
         listarBilleteras(db, { incluirArchivadas: true }),
-        listarCategorias(db),
+        listarCategorias(db, undefined, { incluirArchivadas: true }),
       ]);
       setCategorias(cats);
 
@@ -110,9 +116,18 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
       if (m.tasa_cambio !== null) setTasaTexto(tasaATexto(m.tasa_cambio));
       setFecha(new Date(m.fecha));
       setNota(m.nota ?? '');
+      setUsarComision(m.comision !== null);
+      if (m.comision !== null) setComisionTexto(centimosATexto(m.comision));
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
   }, [db, id, billeteraInicial]);
+
+  // Al volver de crear una categoría desde aquí, aparece en la lista.
+  useFocusEffect(
+    useCallback(() => {
+      listarCategorias(db, undefined, { incluirArchivadas: true }).then(setCategorias).catch(() => {});
+    }, [db]),
+  );
 
   const origen = billeteras.find((b) => b.id === origenId) ?? null;
   const destino = billeteras.find((b) => b.id === destinoId) ?? null;
@@ -196,6 +211,16 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
     });
   };
 
+  // Comisión bancaria (Pago Móvil): se propone según la billetera de origen.
+  const configComision = {
+    porcentaje: origen?.comision_porcentaje ?? 0,
+    minima: origen?.comision_minima ?? 0,
+  };
+  const admiteComision = tipo !== 'INGRESO' && origen !== null && original?.comision_de == null;
+  const comisionActiva = admiteComision && (usarComision ?? tieneComision(configComision));
+  const comisionAuto = monto && monto > 0 ? calcularComision(monto, configComision) : 0;
+  const comision = !comisionActiva ? 0 : comisionTexto.trim() !== '' ? parsearMonto(comisionTexto) : comisionAuto;
+
   const guardar = async () => {
     if (!monto || monto <= 0) {
       setError('Escribe un monto mayor que cero.');
@@ -209,6 +234,10 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
       setError('Indica cuánto recibiste o la tasa pactada.');
       return;
     }
+    if (comisionActiva && (comision === null || comision < 0)) {
+      setError('El monto de la comisión no es válido.');
+      return;
+    }
     setGuardando(true);
     setError(null);
     const datos = {
@@ -220,6 +249,8 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
       billetera_destino_id: esTransferencia ? destinoId : null,
       monto_destino: conCambio ? recibido : null,
       nota,
+      // Una comisión (hija de otro movimiento) no lleva comisión propia.
+      comision: original?.comision_de != null ? undefined : comision || 0,
     };
     try {
       if (id === undefined) await crearMovimiento(db, datos);
@@ -285,10 +316,11 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
     );
   }
 
-  const categoriasTipo = categorias.filter((c) => c.tipo === tipo);
+  // Las archivadas no se ofrecen, salvo la que ya tenga el movimiento que se edita.
+  const categoriasTipo = categorias.filter((c) => c.tipo === tipo && (!c.archivada || c.id === categoriaId));
   // Aviso (no bloquea) si un movimiento nuevo deja la billetera en negativo.
   const quedaNegativo =
-    !editando && tipo !== 'INGRESO' && origen && monto && monto > 0 && origen.saldo - monto < 0;
+    !editando && tipo !== 'INGRESO' && origen && monto && monto > 0 && origen.saldo - monto - (comision ?? 0) < 0;
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -316,7 +348,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
             <HelperText type="error">Número no válido</HelperText>
           ) : quedaNegativo ? (
             <HelperText type="info" style={{ color: tema.colors.error }}>
-              {`${origen.nombre} quedará en ${formatearMonto(origen.saldo - monto, origen.moneda)}`}
+              {`${origen.nombre} quedará en ${formatearMonto(origen.saldo - monto - (comision ?? 0), origen.moneda)}`}
             </HelperText>
           ) : origen && monto ? (
             <HelperText type="info">{formatearMonto(monto, origen.moneda)}</HelperText>
@@ -380,7 +412,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
             )}
             {conCambio && recibido !== null && recibido > 0 && (
               <HelperText type="info">
-                {`${destino.nombre} recibe ${formatearMonto(recibido, destino.moneda)}. Las comisiones regístralas como gasto aparte.`}
+                {`${destino.nombre} recibe ${formatearMonto(recibido, destino.moneda)}.`}
               </HelperText>
             )}
           </>
@@ -406,7 +438,55 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
                   </Chip>
                 );
               })}
+              <Chip
+                icon="plus"
+                mode="outlined"
+                onPress={() => router.push({ pathname: '/categoria/nueva', params: { tipo } })}
+              >
+                Nueva
+              </Chip>
             </View>
+          </View>
+        )}
+
+        {admiteComision && origen && (
+          <View style={styles.bloque}>
+            <View style={styles.filaSwitch}>
+              <View style={styles.flex}>
+                <Text variant="labelLarge">Comisión bancaria</Text>
+                <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                  {comisionActiva
+                    ? `${formatearMonto(comision ?? 0, origen.moneda)} · se registra aparte en "Comisiones"`
+                    : tieneComision(configComision)
+                      ? `Desactivada (${origen.nombre}: ${describirComision(configComision, (c) => formatearMonto(c, origen.moneda))})`
+                      : 'Sin comisión'}
+                </Text>
+              </View>
+              <Switch
+                value={comisionActiva}
+                onValueChange={(v) => setUsarComision(v)}
+                accessibilityLabel="Cobrar comisión bancaria"
+              />
+            </View>
+            {comisionActiva && (
+              <TextInput
+                label="Monto de la comisión"
+                value={comisionTexto}
+                onChangeText={setComisionTexto}
+                placeholder={comisionAuto ? centimosATexto(comisionAuto) : undefined}
+                keyboardType="decimal-pad"
+                mode="outlined"
+                dense
+                right={<TextInput.Affix text={INFO_MONEDA[origen.moneda].corto} />}
+              />
+            )}
+            {comisionActiva && comisionTexto.trim() === '' && (
+              <HelperText type="info">
+                {tieneComision(configComision)
+                  ? `Calculada: ${describirComision(configComision, (c) => formatearMonto(c, origen.moneda))}. Escribe otro monto si tu banco cobró distinto.`
+                  : 'Escribe cuánto te cobró el banco. Puedes configurar la comisión en la billetera.'}
+              </HelperText>
+            )}
           </View>
         )}
 
@@ -452,4 +532,5 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   filaCampos: { flexDirection: 'row', gap: 8 },
   textoElegido: { color: '#FFFFFF' },
+  filaSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12 },
 });

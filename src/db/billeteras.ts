@@ -12,6 +12,10 @@ export interface Billetera {
   archivada: boolean;
   /** Saldo actual en céntimos: balance inicial más todos los movimientos. */
   saldo: number;
+  /** Comisión que cobra el banco al pagar desde esta billetera (p. ej. Pago Móvil). */
+  comision_porcentaje: number;
+  /** Céntimos. */
+  comision_minima: number;
 }
 
 export interface DatosBilletera {
@@ -20,6 +24,8 @@ export interface DatosBilletera {
   balance_inicial: number;
   icono: string;
   color_hex: string;
+  comision_porcentaje?: number;
+  comision_minima?: number;
 }
 
 export const LARGO_MAXIMO_NOMBRE = 40;
@@ -32,6 +38,7 @@ interface FilaBilletera extends Omit<Billetera, 'archivada'> {
 
 const SELECT_CON_SALDO = `
   SELECT b.id, b.nombre, b.moneda, b.balance_inicial, b.icono, b.color_hex, b.archivada,
+    b.comision_porcentaje, b.comision_minima,
     b.balance_inicial
     + COALESCE((
         SELECT SUM(CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META') THEN t.monto ELSE -t.monto END)
@@ -56,7 +63,15 @@ function validar(datos: DatosBilletera): DatosBilletera {
   if (!Number.isSafeInteger(datos.balance_inicial)) {
     throw new ErrorValidacion('El saldo inicial no es válido.');
   }
-  return { ...datos, nombre };
+  const comision_porcentaje = datos.comision_porcentaje ?? 0;
+  const comision_minima = datos.comision_minima ?? 0;
+  if (!(comision_porcentaje >= 0 && comision_porcentaje <= 20)) {
+    throw new ErrorValidacion('La comisión debe estar entre 0 % y 20 %.');
+  }
+  if (!Number.isSafeInteger(comision_minima) || comision_minima < 0) {
+    throw new ErrorValidacion('La comisión mínima no es válida.');
+  }
+  return { ...datos, nombre, comision_porcentaje, comision_minima };
 }
 
 export async function listarBilleteras(
@@ -79,8 +94,9 @@ export async function obtenerBilletera(db: BaseDatos, id: number): Promise<Bille
 export async function crearBilletera(db: BaseDatos, datos: DatosBilletera): Promise<number> {
   const d = validar(datos);
   const r = await db.runAsync(
-    `INSERT INTO billeteras (nombre, moneda, balance_inicial, icono, color_hex) VALUES (?, ?, ?, ?, ?)`,
-    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex],
+    `INSERT INTO billeteras (nombre, moneda, balance_inicial, icono, color_hex, comision_porcentaje, comision_minima)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!],
   );
   return r.lastInsertRowId;
 }
@@ -109,8 +125,9 @@ export async function actualizarBilletera(
     throw new ErrorValidacion('No se puede cambiar la moneda de una billetera con movimientos.');
   }
   await db.runAsync(
-    `UPDATE billeteras SET nombre = ?, moneda = ?, balance_inicial = ?, icono = ?, color_hex = ? WHERE id = ?`,
-    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, id],
+    `UPDATE billeteras SET nombre = ?, moneda = ?, balance_inicial = ?, icono = ?, color_hex = ?,
+       comision_porcentaje = ?, comision_minima = ? WHERE id = ?`,
+    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!, id],
   );
 }
 
@@ -136,7 +153,16 @@ export async function eliminarBilletera(
 
 export const BILLETERAS_SUGERIDAS: DatosBilletera[] = [
   { nombre: 'Efectivo', moneda: 'USD', balance_inicial: 0, icono: 'cash', color_hex: '#2E7D32' },
-  { nombre: 'Banco / Pago Móvil', moneda: 'BS', balance_inicial: 0, icono: 'bank', color_hex: '#1565C0' },
+  {
+    nombre: 'Banco / Pago Móvil',
+    moneda: 'BS',
+    balance_inicial: 0,
+    icono: 'bank',
+    color_hex: '#1565C0',
+    // Pago Móvil a persona según el BCV (ver lib/comision.ts).
+    comision_porcentaje: 0.3,
+    comision_minima: 1400,
+  },
   { nombre: 'Binance', moneda: 'USDT', balance_inicial: 0, icono: 'bitcoin', color_hex: '#F9A825' },
 ];
 

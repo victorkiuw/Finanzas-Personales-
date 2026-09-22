@@ -58,7 +58,7 @@ export default function PantallaMovimientos() {
 
   useFocusEffect(
     useCallback(() => {
-      Promise.all([listarBilleteras(db, { incluirArchivadas: true }), listarCategorias(db)])
+      Promise.all([listarBilleteras(db, { incluirArchivadas: true }), listarCategorias(db, undefined, { incluirArchivadas: true })])
         .then(([b, c]) => {
           setBilleteras(b);
           setCategorias(c);

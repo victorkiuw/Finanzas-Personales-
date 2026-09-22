@@ -26,7 +26,17 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: tema.colors.background },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Inicio', headerTitle: 'Resumen', tabBarIcon: icono('home') }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Inicio',
+          headerTitle: 'Resumen',
+          tabBarIcon: icono('home'),
+          headerRight: () => (
+            <IconButton icon="cog" accessibilityLabel="Ajustes" onPress={() => router.push('/ajustes')} />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="billeteras"
         options={{

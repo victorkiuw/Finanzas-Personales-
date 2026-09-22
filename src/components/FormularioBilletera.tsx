@@ -26,6 +26,7 @@ import {
 } from '../db/billeteras';
 import { centimosATexto, formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../lib/moneda';
 import { COLORES_BILLETERA, ICONOS_BILLETERA } from '../lib/tema';
+import { EditorComision, leerComision, porcentajeATexto } from './EditorComision';
 
 interface Props {
   /** Si no se indica, el formulario crea una billetera nueva. */
@@ -45,6 +46,8 @@ export function FormularioBilletera({ id }: Props) {
   const [saldoTexto, setSaldoTexto] = useState('');
   const [icono, setIcono] = useState<string>(ICONOS_BILLETERA[0]);
   const [color, setColor] = useState<string>(COLORES_BILLETERA[0]);
+  const [comisionPct, setComisionPct] = useState('');
+  const [comisionMin, setComisionMin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -63,6 +66,8 @@ export function FormularioBilletera({ id }: Props) {
       setSaldoTexto(centimosATexto(b.balance_inicial));
       setIcono(b.icono);
       setColor(b.color_hex);
+      setComisionPct(porcentajeATexto(b.comision_porcentaje));
+      setComisionMin(b.comision_minima ? centimosATexto(b.comision_minima) : '');
       setMovimientos(await contarMovimientos(db, id));
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
@@ -76,9 +81,22 @@ export function FormularioBilletera({ id }: Props) {
       setError('El saldo inicial no es un número válido.');
       return;
     }
+    const comision = leerComision(comisionPct, comisionMin);
+    if (!comision) {
+      setError('La comisión no es válida.');
+      return;
+    }
     setGuardando(true);
     setError(null);
-    const datos = { nombre, moneda, balance_inicial: saldoInicial, icono, color_hex: color };
+    const datos = {
+      nombre,
+      moneda,
+      balance_inicial: saldoInicial,
+      icono,
+      color_hex: color,
+      comision_porcentaje: comision.porcentaje,
+      comision_minima: comision.minima,
+    };
     try {
       if (id === undefined) await crearBilletera(db, datos);
       else await actualizarBilletera(db, id, datos);
@@ -169,6 +187,16 @@ export function FormularioBilletera({ id }: Props) {
               : `${formatearMonto(saldoInicial, moneda)} · lo que tenías antes de empezar a registrar`}
           </HelperText>
         </View>
+
+        <EditorComision
+          moneda={moneda}
+          porcentajeTexto={comisionPct}
+          minimaTexto={comisionMin}
+          onCambio={(p, m) => {
+            setComisionPct(p);
+            setComisionMin(m);
+          }}
+        />
 
         <View>
           <Text variant="labelLarge" style={styles.etiqueta}>
