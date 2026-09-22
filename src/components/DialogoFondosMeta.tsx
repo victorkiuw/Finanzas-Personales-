@@ -1,6 +1,6 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Button, Chip, Dialog, HelperText, Portal, Text, TextInput } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
@@ -28,6 +28,18 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
   const [tasaTexto, setTasaTexto] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  // El diálogo no se aparta solo del teclado: se sube y se limita su alto a mano.
+  const [alturaTeclado, setAlturaTeclado] = useState(0);
+  const { height: altoPantalla } = useWindowDimensions();
+
+  useEffect(() => {
+    const mostrar = Keyboard.addListener('keyboardDidShow', (e) => setAlturaTeclado(e.endCoordinates.height));
+    const ocultar = Keyboard.addListener('keyboardDidHide', () => setAlturaTeclado(0));
+    return () => {
+      mostrar.remove();
+      ocultar.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!tipo) return;
@@ -49,13 +61,22 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
   const [de, a] = billetera ? (aporte ? [billetera.moneda, meta.moneda] : [meta.moneda, billetera.moneda]) : [meta.moneda, meta.moneda];
   // "monto" es lo que sale (billetera al abonar, meta al retirar); "equivalente" lo que llega.
   const monto = parsearMonto(montoTexto);
-  const equivalente = parsearMonto(equivalenteTexto);
+  // Entre USD y USDT la tasa por defecto es 1; con Bs. hay que escribirla.
+  const tasaPorDefecto = conCambio && !hayBolivar(de, a) ? 1 : null;
+  const tasa = parsearTasa(tasaTexto) ?? tasaPorDefecto;
+  const equivalente =
+    equivalenteTexto.trim() !== ''
+      ? parsearMonto(equivalenteTexto)
+      : conCambio && monto && monto > 0 && tasa
+        ? recibidoConTasa(de, a, monto, tasa)
+        : null;
 
   const cambiarMonto = (t: string) => {
     setMontoTexto(t);
     const m = parsearMonto(t);
-    const tasa = parsearTasa(tasaTexto);
-    if (conCambio && m && m > 0 && tasa) setEquivalenteTexto(centimosATexto(recibidoConTasa(de, a, m, tasa)));
+    const escrita = parsearTasa(tasaTexto);
+    if (conCambio && m && m > 0 && escrita) setEquivalenteTexto(centimosATexto(recibidoConTasa(de, a, m, escrita)));
+    else if (!escrita) setEquivalenteTexto('');
   };
   const cambiarTasa = (t: string) => {
     setTasaTexto(t);
@@ -100,9 +121,9 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
 
   return (
     <Portal>
-      <Dialog visible={tipo !== null} onDismiss={() => onCerrar(false)}>
+      <Dialog visible={tipo !== null} onDismiss={() => onCerrar(false)} style={{ marginBottom: alturaTeclado }}>
         <Dialog.Title>{aporte ? `Abonar a ${meta.nombre}` : `Retirar de ${meta.nombre}`}</Dialog.Title>
-        <Dialog.ScrollArea style={styles.area}>
+        <Dialog.ScrollArea style={[styles.area, { maxHeight: Math.max(altoPantalla - alturaTeclado - 260, 160) }]}>
           <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
             <Text variant="labelLarge">{aporte ? 'Sale de' : 'Entra a'}</Text>
             <SelectorBilletera
@@ -138,6 +159,7 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
                   <TextInput
                     label={`Tasa (${unidadTasa(de, a)})`}
                     value={tasaTexto}
+                    placeholder={tasaPorDefecto ? '1' : undefined}
                     onChangeText={cambiarTasa}
                     keyboardType="decimal-pad"
                     mode="outlined"
@@ -146,6 +168,7 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
                   <TextInput
                     label="Equivale a"
                     value={equivalenteTexto}
+                    placeholder={equivalente ? centimosATexto(equivalente) : undefined}
                     onChangeText={cambiarEquivalente}
                     keyboardType="decimal-pad"
                     mode="outlined"
@@ -163,6 +186,11 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
                   </View>
                 )}
               </>
+            )}
+            {conCambio && equivalente !== null && equivalente > 0 && (
+              <HelperText type="info">
+                {`${aporte ? 'Llega a la meta' : 'Recibes'}: ${formatearMonto(equivalente, a)}${tasaPorDefecto && !parsearTasa(tasaTexto) ? ' (1 a 1)' : ''}`}
+              </HelperText>
             )}
             {error && <HelperText type="error">{error}</HelperText>}
           </ScrollView>

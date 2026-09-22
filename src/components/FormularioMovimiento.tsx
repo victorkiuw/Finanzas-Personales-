@@ -119,18 +119,26 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
   const esTransferencia = tipo === 'TRANSFERENCIA';
   const conCambio = esTransferencia && origen && destino && origen.moneda !== destino.moneda;
   const monto = parsearMonto(montoTexto);
-  const recibido = parsearMonto(recibidoTexto);
-  const tasa = parsearTasa(tasaTexto);
-
-  /** Recalcula lo recibido a partir de la tasa escrita (la tasa manda). */
-  const sincronizarRecibido = (nuevoMonto: number | null, o = origen, d = destino) => {
-    if (!o || !d || o.moneda === d.moneda || !nuevoMonto || nuevoMonto <= 0 || !tasa) return;
-    setRecibidoTexto(centimosATexto(recibidoConTasa(o.moneda, d.moneda, nuevoMonto, tasa)));
-  };
+  // Entre USD y USDT la tasa por defecto es 1 (se consideran equivalentes); con Bs. hay que escribirla.
+  const tasaPorDefecto = origen && destino && !hayBolivar(origen.moneda, destino.moneda) ? 1 : null;
+  const tasa = parsearTasa(tasaTexto) ?? tasaPorDefecto;
+  const recibido =
+    recibidoTexto.trim() !== ''
+      ? parsearMonto(recibidoTexto)
+      : conCambio && monto && monto > 0 && tasa
+        ? recibidoConTasa(origen.moneda, destino.moneda, monto, tasa)
+        : null;
 
   const cambiarMonto = (t: string) => {
     setMontoTexto(t);
-    sincronizarRecibido(parsearMonto(t));
+    // Si hay una tasa escrita, manda ella: se recalcula lo recibido.
+    const nuevo = parsearMonto(t);
+    const escrita = parsearTasa(tasaTexto);
+    if (conCambio && nuevo && nuevo > 0 && escrita) {
+      setRecibidoTexto(centimosATexto(recibidoConTasa(origen.moneda, destino.moneda, nuevo, escrita)));
+    } else if (!escrita) {
+      setRecibidoTexto('');
+    }
   };
 
   const cambiarTasa = (t: string) => {
@@ -149,15 +157,21 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
     }
   };
 
+  // Con otro par de monedas, la tasa y lo recibido que se habían escrito ya no aplican.
+  const reiniciarCambio = () => {
+    setTasaTexto('');
+    setRecibidoTexto('');
+  };
+
   const cambiarOrigen = (bid: number) => {
     setOrigenId(bid);
     if (bid === destinoId) setDestinoId(null);
-    sincronizarRecibido(monto, billeteras.find((b) => b.id === bid), destino);
+    if (billeteras.find((b) => b.id === bid)?.moneda !== origen?.moneda) reiniciarCambio();
   };
 
   const cambiarDestino = (bid: number) => {
     setDestinoId(bid);
-    sincronizarRecibido(monto, origen, billeteras.find((b) => b.id === bid));
+    if (billeteras.find((b) => b.id === bid)?.moneda !== destino?.moneda) reiniciarCambio();
   };
 
   const cambiarTipo = (t: TipoMovimiento) => {
@@ -337,6 +351,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
                 <TextInput
                   label={`Tasa (${unidadTasa(origen.moneda, destino.moneda)})`}
                   value={tasaTexto}
+                  placeholder={tasaPorDefecto ? '1' : undefined}
                   onChangeText={cambiarTasa}
                   keyboardType="decimal-pad"
                   mode="outlined"
@@ -345,6 +360,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
                 <TextInput
                   label="Recibido"
                   value={recibidoTexto}
+                  placeholder={recibido ? centimosATexto(recibido) : undefined}
                   onChangeText={cambiarRecibido}
                   keyboardType="decimal-pad"
                   mode="outlined"

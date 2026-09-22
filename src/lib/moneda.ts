@@ -26,15 +26,17 @@ export function formatearNumero(centimos: number): string {
   return `${negativo ? '-' : ''}${entero},${decimales}`;
 }
 
+/** El signo va siempre delante: "-Bs. 350,00", "-$25,50", "-3,00 USDT". */
 export function formatearMonto(centimos: number, moneda: Moneda): string {
-  const numero = formatearNumero(centimos);
+  const numero = formatearNumero(Math.abs(centimos));
+  const signo = centimos < 0 ? '-' : '';
   switch (moneda) {
     case 'USD':
-      return numero.startsWith('-') ? `-$${numero.slice(1)}` : `$${numero}`;
+      return `${signo}$${numero}`;
     case 'BS':
-      return `Bs. ${numero}`;
+      return `${signo}Bs. ${numero}`;
     case 'USDT':
-      return `${numero} USDT`;
+      return `${signo}${numero} USDT`;
   }
 }
 

@@ -8,6 +8,8 @@ test('formatea con miles y decimales venezolanos', () => {
   assert.equal(formatearMonto(100000005, 'USD'), '$1.000.000,05');
   assert.equal(formatearMonto(-2550, 'USD'), '-$25,50');
   assert.equal(formatearMonto(0, 'USDT'), '0,00 USDT');
+  assert.equal(formatearMonto(-35000, 'BS'), '-Bs. 350,00');
+  assert.equal(formatearMonto(-300, 'USDT'), '-3,00 USDT');
 });
 
 test('parsea los formatos habituales', () => {
