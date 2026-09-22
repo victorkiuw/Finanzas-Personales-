@@ -44,7 +44,8 @@ const SELECT_CON_SALDO = `
     b.comision_porcentaje, b.comision_minima, b.margen_cambio,
     b.balance_inicial
     + COALESCE((
-        SELECT SUM(CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META') THEN t.monto ELSE -t.monto END)
+        SELECT SUM(CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA')
+                        THEN t.monto ELSE -t.monto END)
         FROM transacciones t WHERE t.billetera_origen_id = b.id), 0)
     + COALESCE((
         SELECT SUM(t.monto_destino)

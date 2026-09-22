@@ -132,15 +132,77 @@ const MIGRACIONES: string[] = [
   `
   ALTER TABLE billeteras ADD COLUMN margen_cambio REAL;
   `,
+  // v6: deudas y préstamos. SQLite no permite cambiar un CHECK, así que la tabla de
+  // transacciones se reconstruye con los tipos nuevos y la columna deuda_id.
+  // La tabla nueva se referencia a sí misma por su nombre temporal: al renombrarla,
+  // SQLite actualiza esa referencia (y el DROP de la vieja no la toca).
+  `
+  CREATE TABLE deudas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('ME_DEBEN', 'DEBO')),
+    persona TEXT NOT NULL,
+    moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS', 'USDT')),
+    monto INTEGER NOT NULL CHECK (monto > 0),
+    tasa_referencia REAL CHECK (tasa_referencia IS NULL OR tasa_referencia > 0),
+    fecha TEXT NOT NULL,
+    fecha_limite TEXT,
+    nota TEXT,
+    cerrada INTEGER NOT NULL DEFAULT 0 CHECK (cerrada IN (0, 1)),
+    creada_en TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
+  CREATE TABLE transacciones_v6 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('GASTO', 'INGRESO', 'TRANSFERENCIA', 'APORTE_META', 'RETIRO_META',
+      'PRESTAMO_DADO', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA', 'PAGO_DEUDA')),
+    monto INTEGER NOT NULL CHECK (monto > 0),
+    fecha TEXT NOT NULL,
+    categoria_id INTEGER REFERENCES categorias (id) ON DELETE RESTRICT,
+    billetera_origen_id INTEGER NOT NULL REFERENCES billeteras (id) ON DELETE RESTRICT,
+    billetera_destino_id INTEGER REFERENCES billeteras (id) ON DELETE RESTRICT,
+    meta_id INTEGER REFERENCES metas_ahorro (id) ON DELETE RESTRICT,
+    monto_destino INTEGER CHECK (monto_destino IS NULL OR monto_destino > 0),
+    tasa_cambio REAL,
+    nota TEXT,
+    creada_en TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    comision_de INTEGER REFERENCES transacciones_v6 (id) ON DELETE CASCADE,
+    deuda_id INTEGER REFERENCES deudas (id) ON DELETE CASCADE,
+    CHECK (tipo <> 'TRANSFERENCIA' OR (
+      billetera_destino_id IS NOT NULL
+      AND billetera_destino_id <> billetera_origen_id
+      AND monto_destino IS NOT NULL)),
+    CHECK (tipo NOT IN ('APORTE_META', 'RETIRO_META') OR (meta_id IS NOT NULL AND monto_destino IS NOT NULL)),
+    CHECK (tipo NOT IN ('PRESTAMO_DADO', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA', 'PAGO_DEUDA')
+      OR (deuda_id IS NOT NULL AND monto_destino IS NOT NULL))
+  );
+
+  INSERT INTO transacciones_v6 (id, tipo, monto, fecha, categoria_id, billetera_origen_id, billetera_destino_id,
+      meta_id, monto_destino, tasa_cambio, nota, creada_en, comision_de)
+    SELECT id, tipo, monto, fecha, categoria_id, billetera_origen_id, billetera_destino_id,
+      meta_id, monto_destino, tasa_cambio, nota, creada_en, comision_de
+    FROM transacciones ORDER BY id;
+
+  DROP TABLE transacciones;
+  ALTER TABLE transacciones_v6 RENAME TO transacciones;
+
+  CREATE INDEX idx_transacciones_fecha ON transacciones (fecha);
+  CREATE INDEX idx_transacciones_origen ON transacciones (billetera_origen_id);
+  CREATE INDEX idx_transacciones_destino ON transacciones (billetera_destino_id);
+  CREATE INDEX idx_transacciones_categoria ON transacciones (categoria_id);
+  CREATE INDEX idx_transacciones_meta ON transacciones (meta_id);
+  CREATE INDEX idx_transacciones_comision ON transacciones (comision_de);
+  CREATE INDEX idx_transacciones_deuda ON transacciones (deuda_id);
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;
 
-export async function migrar(db: BaseDatos): Promise<void> {
+/** `hasta` solo se usa en pruebas, para simular una base de datos de una versión anterior. */
+export async function migrar(db: BaseDatos, hasta = MIGRACIONES.length): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   const fila = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version', []);
   const actual = fila?.user_version ?? 0;
-  for (let v = actual; v < MIGRACIONES.length; v++) {
+  for (let v = actual; v < hasta; v++) {
     try {
       await db.execAsync(`BEGIN; ${MIGRACIONES[v]}; PRAGMA user_version = ${v + 1}; COMMIT;`);
     } catch (error) {

@@ -7,7 +7,19 @@ import { enTransaccion, type BaseDatos, type ValorSQL } from './tipos';
 /** Tipos que se registran desde el formulario de movimientos (las metas llegan en la fase 4). */
 export type TipoMovimiento = 'GASTO' | 'INGRESO' | 'TRANSFERENCIA';
 
-export type TipoTransaccion = TipoMovimiento | 'APORTE_META' | 'RETIRO_META';
+export type TipoTransaccion =
+  | TipoMovimiento
+  | 'APORTE_META'
+  | 'RETIRO_META'
+  | 'PRESTAMO_DADO'
+  | 'PRESTAMO_RECIBIDO'
+  | 'COBRO_DEUDA'
+  | 'PAGO_DEUDA';
+
+/** Tipos en los que entra dinero a billetera_origen_id (el resto resta, salvo el destino de una transferencia). */
+export const TIPOS_ENTRADA: readonly TipoTransaccion[] = ['INGRESO', 'RETIRO_META', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA'];
+
+export const TIPOS_DEUDA: readonly TipoTransaccion[] = ['PRESTAMO_DADO', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA', 'PAGO_DEUDA'];
 
 export interface DatosMovimiento {
   tipo: TipoMovimiento;
@@ -54,6 +66,8 @@ export interface Movimiento {
   comision_de: number | null;
   /** Comisión vinculada a este movimiento, en céntimos de la billetera origen. */
   comision: number | null;
+  deuda_id: number | null;
+  deuda_persona: string | null;
 }
 
 export interface FiltroMovimientos {
@@ -61,6 +75,7 @@ export interface FiltroMovimientos {
   billeteraId?: number;
   categoriaId?: number;
   metaId?: number;
+  deudaId?: number;
   tipo?: TipoTransaccion;
   /** ISO inclusivo. */
   desde?: string;
@@ -78,12 +93,14 @@ const SELECT_MOVIMIENTO = `
     t.billetera_origen_id, o.nombre AS origen_nombre, o.moneda AS origen_moneda,
     t.billetera_destino_id, d.nombre AS destino_nombre, d.moneda AS destino_moneda,
     t.monto_destino, t.tasa_cambio, t.meta_id, m.nombre AS meta_nombre, m.moneda AS meta_moneda,
-    t.comision_de, (SELECT SUM(c.monto) FROM transacciones c WHERE c.comision_de = t.id) AS comision
+    t.comision_de, (SELECT SUM(c.monto) FROM transacciones c WHERE c.comision_de = t.id) AS comision,
+    t.deuda_id, dd.persona AS deuda_persona
   FROM transacciones t
   JOIN billeteras o ON o.id = t.billetera_origen_id
   LEFT JOIN billeteras d ON d.id = t.billetera_destino_id
   LEFT JOIN categorias c ON c.id = t.categoria_id
-  LEFT JOIN metas_ahorro m ON m.id = t.meta_id`;
+  LEFT JOIN metas_ahorro m ON m.id = t.meta_id
+  LEFT JOIN deudas dd ON dd.id = t.deuda_id`;
 
 interface FilaBilleteraMin {
   id: number;
@@ -205,8 +222,8 @@ export async function crearMovimiento(db: BaseDatos, datos: DatosMovimiento): Pr
 export async function actualizarMovimiento(db: BaseDatos, id: number, datos: DatosMovimiento): Promise<void> {
   const actual = await obtenerMovimiento(db, id);
   if (!actual) throw new ErrorValidacion('El movimiento no existe.');
-  if (actual.meta_id !== null) {
-    throw new ErrorValidacion('Los movimientos de metas se editan desde el módulo de ahorros.');
+  if (actual.meta_id !== null || actual.deuda_id !== null) {
+    throw new ErrorValidacion('Los movimientos de metas y deudas se gestionan desde su propia pantalla.');
   }
   const valores = await preparar(db, datos, id);
   let comision = validarComision(datos);
@@ -260,6 +277,10 @@ export async function listarMovimientos(db: BaseDatos, f: FiltroMovimientos = {}
     condiciones.push('t.meta_id = ?');
     params.push(f.metaId);
   }
+  if (f.deudaId !== undefined) {
+    condiciones.push('t.deuda_id = ?');
+    params.push(f.deudaId);
+  }
   if (f.tipo !== undefined) {
     condiciones.push('t.tipo = ?');
     params.push(f.tipo);
@@ -289,7 +310,7 @@ export async function listarMovimientos(db: BaseDatos, f: FiltroMovimientos = {}
 export function efectoEnBilletera(m: Movimiento, billeteraId: number): number {
   if (m.tipo === 'TRANSFERENCIA' && m.billetera_destino_id === billeteraId) return m.monto_destino ?? 0;
   if (m.billetera_origen_id !== billeteraId) return 0;
-  return m.tipo === 'INGRESO' || m.tipo === 'RETIRO_META' ? m.monto : -m.monto;
+  return TIPOS_ENTRADA.includes(m.tipo) ? m.monto : -m.monto;
 }
 
 /**

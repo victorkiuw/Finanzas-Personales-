@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 import { Avatar, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
-import { efectoEnBilletera, type Movimiento } from '../db/movimientos';
+import { efectoEnBilletera, TIPOS_DEUDA, TIPOS_ENTRADA, type Movimiento } from '../db/movimientos';
 import { formatearHora } from '../lib/fechas';
 import { formatearMonto } from '../lib/moneda';
 
@@ -25,6 +25,14 @@ function titulo(m: Movimiento): string {
       return `Aporte a ${m.meta_nombre ?? 'meta'}`;
     case 'RETIRO_META':
       return `Retiro de ${m.meta_nombre ?? 'meta'}`;
+    case 'PRESTAMO_DADO':
+      return `Préstamo a ${m.deuda_persona ?? '…'}`;
+    case 'PRESTAMO_RECIBIDO':
+      return `Préstamo de ${m.deuda_persona ?? '…'}`;
+    case 'COBRO_DEUDA':
+      return `Te pagó ${m.deuda_persona ?? '…'}`;
+    case 'PAGO_DEUDA':
+      return `Pago a ${m.deuda_persona ?? '…'}`;
     default:
       return m.categoria_nombre ?? 'Sin categoría';
   }
@@ -53,7 +61,7 @@ export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: 
       detalleMonto = `→ ${formatearMonto(m.monto_destino ?? 0, m.destino_moneda!)}`;
     }
   } else {
-    const entra = m.tipo === 'INGRESO' || m.tipo === 'RETIRO_META';
+    const entra = TIPOS_ENTRADA.includes(m.tipo);
     montoTexto = `${entra ? '+' : '-'}${formatearMonto(m.monto, m.origen_moneda)}`;
     if (entra) color = verde;
   }
@@ -71,7 +79,7 @@ export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: 
       <View style={styles.fila}>
         <Avatar.Icon
           size={40}
-          icon={esTransferencia ? 'swap-horizontal' : (m.categoria_icono ?? 'piggy-bank')}
+          icon={esTransferencia ? 'swap-horizontal' : TIPOS_DEUDA.includes(m.tipo) ? 'handshake' : (m.categoria_icono ?? 'piggy-bank')}
           color="#FFFFFF"
           style={{ backgroundColor: esTransferencia ? tema.colors.secondary : (m.categoria_color ?? tema.colors.tertiary) }}
         />

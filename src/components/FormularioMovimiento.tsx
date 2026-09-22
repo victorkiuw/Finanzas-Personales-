@@ -302,6 +302,27 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
     );
   }
 
+  if (original?.deuda_id != null) {
+    const entra = original.tipo === 'PRESTAMO_RECIBIDO' || original.tipo === 'COBRO_DEUDA';
+    return (
+      <View style={styles.contenido}>
+        <Stack.Screen options={{ title: titulo }} />
+        <Text variant="bodyLarge">
+          {`${formatearMonto(original.monto, original.origen_moneda)} ${entra ? 'entraron a' : 'salieron de'} ${original.origen_nombre} por la deuda con ${original.deuda_persona}.`}
+        </Text>
+        <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
+          Los movimientos de deudas se gestionan desde la deuda; si te equivocaste, elimínalo y regístralo de nuevo.
+        </Text>
+        <Button mode="outlined" icon="handshake" onPress={() => router.replace(`/deuda/${original.deuda_id}`)}>
+          Ver la deuda
+        </Button>
+        <Button mode="text" icon="delete" textColor={tema.colors.error} onPress={confirmarEliminar}>
+          Eliminar movimiento
+        </Button>
+      </View>
+    );
+  }
+
   if (billeteras.length === 0) {
     return (
       <View style={styles.contenido}>
