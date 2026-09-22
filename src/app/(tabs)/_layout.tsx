@@ -53,7 +53,7 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen name="movimientos" options={{ title: 'Movimientos', tabBarIcon: icono('swap-vertical') }} />
-      <Tabs.Screen name="ahorros" options={{ title: 'Ahorros', headerTitle: 'Metas de ahorro', tabBarIcon: icono('piggy-bank') }} />
+      <Tabs.Screen name="ahorros" options={{ title: 'Ahorros', headerTitle: 'Ahorros y deudas', tabBarIcon: icono('piggy-bank') }} />
       <Tabs.Screen
         name="tasas"
         options={{ title: 'Tasas', headerTitle: 'Tasas y calculadora', tabBarIcon: icono('calculator-variant') }}
