@@ -291,3 +291,21 @@ export function efectoEnBilletera(m: Movimiento, billeteraId: number): number {
   if (m.billetera_origen_id !== billeteraId) return 0;
   return m.tipo === 'INGRESO' || m.tipo === 'RETIRO_META' ? m.monto : -m.monto;
 }
+
+/**
+ * Tasa de la última transferencia entre esas dos monedas (en cualquier sentido
+ * si interviene el bolívar, porque la tasa se expresa igual: Bs. por dólar).
+ */
+export async function ultimaTasa(db: BaseDatos, de: Moneda, a: Moneda): Promise<number | null> {
+  const ambosSentidos = de === 'BS' || a === 'BS' ? 1 : 0;
+  const f = await db.getFirstAsync<{ tasa_cambio: number }>(
+    `SELECT t.tasa_cambio FROM transacciones t
+     JOIN billeteras o ON o.id = t.billetera_origen_id
+     JOIN billeteras d ON d.id = t.billetera_destino_id
+     WHERE t.tipo = 'TRANSFERENCIA' AND t.tasa_cambio IS NOT NULL
+       AND ((o.moneda = ? AND d.moneda = ?) OR (? = 1 AND o.moneda = ? AND d.moneda = ?))
+     ORDER BY t.fecha DESC, t.id DESC LIMIT 1`,
+    [de, a, ambosSentidos, a, de],
+  );
+  return f?.tasa_cambio ?? null;
+}

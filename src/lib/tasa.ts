@@ -48,3 +48,8 @@ export function unidadTasa(origen: Moneda, destino: Moneda): string {
   if (origen === 'BS' && destino !== 'BS') return `${corto('BS')} por ${corto(destino)}`;
   return `${corto(destino)} por ${corto(origen)}`;
 }
+
+/** Tasa del banco: la BCV más su margen en %, p. ej. 852,42 + 2 % = 869,47. */
+export function tasaConMargen(bcv: number, margen: number): number {
+  return Math.round(bcv * (1 + margen / 100) * 10000) / 10000;
+}

@@ -29,11 +29,10 @@ import {
 } from '../db/movimientos';
 import { formatearFechaCorta, formatearHora } from '../lib/fechas';
 import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, formatearTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
-import { NOMBRE_PAR, PARES } from '../lib/api-tasas';
+import { calcularTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { calcularComision, describirComision, tieneComision } from '../lib/comision';
 import { SelectorBilletera } from './SelectorBilletera';
-import { useTasas } from './TasasProvider';
+import { SugerenciasTasa } from './SugerenciasTasa';
 
 interface Props {
   /** Si no se indica, se crea un movimiento nuevo. */
@@ -51,7 +50,6 @@ const TIPOS: { value: TipoMovimiento; label: string; icon: string }[] = [
 export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInicial }: Props) {
   const db = useSQLiteContext();
   const tema = useTheme();
-  const { tasas } = useTasas();
   const editando = id !== undefined;
 
   const [cargando, setCargando] = useState(true);
@@ -371,6 +369,11 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
           <>
             <View style={styles.bloque}>
               <Text variant="labelLarge">Hacia</Text>
+              {!destino && (
+                <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                  Para comprar dólares: desde el banco (Bs.) hacia Efectivo o Binance. Para vender, al revés.
+                </Text>
+              )}
               <SelectorBilletera
                 billeteras={billeteras}
                 valor={destinoId}
@@ -401,14 +404,8 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
                 />
               </View>
             )}
-            {conCambio && hayBolivar(origen.moneda, destino.moneda) && (
-              <View style={styles.chips}>
-                {PARES.filter((p) => tasas[p]).map((p) => (
-                  <Chip key={p} compact icon="lightning-bolt" onPress={() => cambiarTasa(tasaATexto(tasas[p]!.tasa))}>
-                    {`${NOMBRE_PAR[p]} ${formatearTasa(tasas[p]!.tasa)}`}
-                  </Chip>
-                ))}
-              </View>
+            {conCambio && (
+              <SugerenciasTasa de={origen.moneda} a={destino.moneda} billeteras={[origen, destino]} onElegir={cambiarTasa} />
             )}
             {conCambio && recibido !== null && recibido > 0 && (
               <HelperText type="info">

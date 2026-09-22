@@ -26,7 +26,9 @@ import {
 } from '../db/billeteras';
 import { centimosATexto, formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../lib/moneda';
 import { COLORES_BILLETERA, ICONOS_BILLETERA } from '../lib/tema';
+import { formatearTasa, tasaConMargen } from '../lib/tasa';
 import { EditorComision, leerComision, porcentajeATexto } from './EditorComision';
+import { useTasas } from './TasasProvider';
 
 interface Props {
   /** Si no se indica, el formulario crea una billetera nueva. */
@@ -36,6 +38,7 @@ interface Props {
 export function FormularioBilletera({ id }: Props) {
   const db = useSQLiteContext();
   const tema = useTheme();
+  const { tasas } = useTasas();
   const editando = id !== undefined;
 
   const [original, setOriginal] = useState<Billetera | null>(null);
@@ -48,6 +51,8 @@ export function FormularioBilletera({ id }: Props) {
   const [color, setColor] = useState<string>(COLORES_BILLETERA[0]);
   const [comisionPct, setComisionPct] = useState('');
   const [comisionMin, setComisionMin] = useState('');
+  // Margen del banco sobre la BCV al comprar/vender dólares, en % (vacío = no se usa).
+  const [margenTexto, setMargenTexto] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -68,12 +73,15 @@ export function FormularioBilletera({ id }: Props) {
       setColor(b.color_hex);
       setComisionPct(porcentajeATexto(b.comision_porcentaje));
       setComisionMin(b.comision_minima ? centimosATexto(b.comision_minima) : '');
+      setMargenTexto(b.margen_cambio === null ? '' : String(b.margen_cambio).replace('.', ','));
       setMovimientos(await contarMovimientos(db, id));
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
   }, [db, id]);
 
   const saldoInicial = saldoTexto.trim() === '' ? 0 : parsearMonto(saldoTexto);
+  const margen = margenTexto.trim() === '' ? null : Number(margenTexto.trim().replace(',', '.'));
+  const margenValido = margen === null || Number.isFinite(margen);
   const monedaBloqueada = movimientos > 0;
 
   const guardar = async () => {
@@ -86,6 +94,10 @@ export function FormularioBilletera({ id }: Props) {
       setError('La comisión no es válida.');
       return;
     }
+    if (!margenValido) {
+      setError('El margen del banco no es un número válido.');
+      return;
+    }
     setGuardando(true);
     setError(null);
     const datos = {
@@ -96,6 +108,8 @@ export function FormularioBilletera({ id }: Props) {
       color_hex: color,
       comision_porcentaje: comision.porcentaje,
       comision_minima: comision.minima,
+      // El margen solo aplica a cuentas en bolívares.
+      margen_cambio: moneda === 'BS' ? margen : null,
     };
     try {
       if (id === undefined) await crearBilletera(db, datos);
@@ -197,6 +211,29 @@ export function FormularioBilletera({ id }: Props) {
             setComisionMin(m);
           }}
         />
+
+        {moneda === 'BS' && (
+          <View>
+            <TextInput
+              label="Margen del banco al cambiar divisas (opcional)"
+              value={margenTexto}
+              onChangeText={setMargenTexto}
+              keyboardType="numbers-and-punctuation"
+              placeholder="Ej.: 2"
+              mode="outlined"
+              dense
+              left={<TextInput.Affix text="BCV +" />}
+              right={<TextInput.Affix text="%" />}
+            />
+            <HelperText type={margenValido ? 'info' : 'error'}>
+              {!margenValido
+                ? 'Número no válido'
+                : margen !== null && tasas.BCV
+                  ? `Al comprar o vender dólares con este banco se propondrá ${formatearTasa(tasaConMargen(tasas.BCV.tasa, margen))} Bs./USD (BCV ${formatearTasa(tasas.BCV.tasa)} ${margen >= 0 ? '+' : ''}${String(margen).replace('.', ',')} %).`
+                  : 'Si tu banco vende/compra dólares a la BCV más un margen, ponlo aquí y la app te propondrá esa tasa.'}
+            </HelperText>
+          </View>
+        )}
 
         <View>
           <Text variant="labelLarge" style={styles.etiqueta}>

@@ -16,10 +16,11 @@ import {
   eliminarMovimiento,
   listarMovimientos,
   obtenerMovimiento,
+  ultimaTasa,
   type DatosMovimiento,
 } from '../src/db/movimientos';
 import type { Moneda } from '../src/lib/moneda';
-import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto } from '../src/lib/tasa';
+import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, tasaConMargen } from '../src/lib/tasa';
 import { crearBdMemoria } from './bd-memoria';
 
 const base: Omit<DatosBilletera, 'nombre' | 'moneda'> = {
@@ -170,4 +171,24 @@ test('tasaATexto se puede volver a parsear', () => {
   assert.equal(tasaATexto(150.256), '150,26');
   assert.equal(tasaATexto(0.99851), '0,9985');
   for (const t of [150, 36.5, 0.9985]) assert.equal(parsearTasa(tasaATexto(t)), t);
+});
+
+test('ultimaTasa: última tasa pactada entre dos monedas', async () => {
+  const { db, usd, bs, usdt } = await preparar();
+  assert.equal(await ultimaTasa(db, 'BS', 'USD'), null);
+  // Compra de dólares en el banco a 870 Bs./USD.
+  await crearMovimiento(db, {
+    tipo: 'TRANSFERENCIA', monto: 870000, fecha: '2026-09-20T12:00:00.000Z', billetera_origen_id: bs,
+    billetera_destino_id: usd, monto_destino: 1000,
+  });
+  await crearMovimiento(db, {
+    tipo: 'TRANSFERENCIA', monto: 1000, fecha: '2026-09-21T12:00:00.000Z', billetera_origen_id: usdt,
+    billetera_destino_id: bs, monto_destino: 950000,
+  });
+  assert.equal(await ultimaTasa(db, 'BS', 'USD'), 870);
+  // Con bolívares vale en ambos sentidos: vender USD usa la misma referencia.
+  assert.equal(await ultimaTasa(db, 'USD', 'BS'), 870);
+  assert.equal(await ultimaTasa(db, 'USDT', 'BS'), 950);
+  assert.equal(await ultimaTasa(db, 'USD', 'USDT'), null);
+  assert.equal(tasaConMargen(852.42, 2), 869.4684);
 });

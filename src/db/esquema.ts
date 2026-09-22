@@ -128,6 +128,10 @@ const MIGRACIONES: string[] = [
   ALTER TABLE transacciones ADD COLUMN comision_de INTEGER REFERENCES transacciones (id) ON DELETE CASCADE;
   CREATE INDEX idx_transacciones_comision ON transacciones (comision_de);
   `,
+  // v5: margen del banco sobre la tasa BCV al comprar/vender divisas (p. ej. 2 = BCV + 2 %).
+  `
+  ALTER TABLE billeteras ADD COLUMN margen_cambio REAL;
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

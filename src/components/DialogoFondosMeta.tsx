@@ -1,15 +1,14 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Button, Chip, Dialog, HelperText, Portal, Text, TextInput } from 'react-native-paper';
+import { Button, Dialog, HelperText, Portal, Text, TextInput } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import { moverFondosMeta, type Meta } from '../db/metas';
-import { NOMBRE_PAR, PARES } from '../lib/api-tasas';
 import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, formatearTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { calcularTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
-import { useTasas } from './TasasProvider';
+import { SugerenciasTasa } from './SugerenciasTasa';
 
 interface Props {
   meta: Meta;
@@ -20,7 +19,6 @@ interface Props {
 /** Abonar dinero de una billetera a la meta, o retirarlo de la meta a una billetera. */
 export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
   const db = useSQLiteContext();
-  const { tasas } = useTasas();
   const [billeteras, setBilleteras] = useState<Billetera[]>([]);
   const [billeteraId, setBilleteraId] = useState<number | null>(null);
   const [montoTexto, setMontoTexto] = useState('');
@@ -176,15 +174,7 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
                     right={<TextInput.Affix text={INFO_MONEDA[a].corto} />}
                   />
                 </View>
-                {hayBolivar(de, a) && (
-                  <View style={styles.chips}>
-                    {PARES.filter((p) => tasas[p]).map((p) => (
-                      <Chip key={p} compact icon="lightning-bolt" onPress={() => cambiarTasa(tasaATexto(tasas[p]!.tasa))}>
-                        {`${NOMBRE_PAR[p]} ${formatearTasa(tasas[p]!.tasa)}`}
-                      </Chip>
-                    ))}
-                  </View>
-                )}
+                <SugerenciasTasa de={de} a={a} billeteras={[billetera]} onElegir={cambiarTasa} />
               </>
             )}
             {conCambio && equivalente !== null && equivalente > 0 && (

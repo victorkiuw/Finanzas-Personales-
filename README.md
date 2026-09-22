@@ -80,6 +80,9 @@ tests/                  pruebas con node:test
   BCV desde agosto de 2026: 0,3 % a persona / 1,5 % a comercio, mínimo Bs. 14). Al registrar un gasto
   o transferencia se propone sola y se guarda como gasto aparte en "Comisiones", vinculado al
   movimiento (si se borra el movimiento, se borra su comisión).
+- **Comprar/vender divisas** es una transferencia entre billeteras de distinta moneda con la tasa
+  pactada. La app propone: la última tasa usada entre esas monedas, BCV, paralelo y la del banco
+  (BCV + el margen configurado en la billetera en Bs.). Todas editables.
 - **Categorías editables** desde Ajustes: las que tienen movimientos se archivan en vez de borrarse.
 - **Copia de seguridad** (Ajustes): exporta un JSON con todos los datos para guardarlo en Drive,
   WhatsApp, etc., y lo restaura reemplazando los datos en una sola transacción.

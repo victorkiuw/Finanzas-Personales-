@@ -16,6 +16,8 @@ export interface Billetera {
   comision_porcentaje: number;
   /** Céntimos. */
   comision_minima: number;
+  /** % sobre la tasa BCV al que el banco vende/compra divisas; null si no se usa. */
+  margen_cambio: number | null;
 }
 
 export interface DatosBilletera {
@@ -26,6 +28,7 @@ export interface DatosBilletera {
   color_hex: string;
   comision_porcentaje?: number;
   comision_minima?: number;
+  margen_cambio?: number | null;
 }
 
 export const LARGO_MAXIMO_NOMBRE = 40;
@@ -38,7 +41,7 @@ interface FilaBilletera extends Omit<Billetera, 'archivada'> {
 
 const SELECT_CON_SALDO = `
   SELECT b.id, b.nombre, b.moneda, b.balance_inicial, b.icono, b.color_hex, b.archivada,
-    b.comision_porcentaje, b.comision_minima,
+    b.comision_porcentaje, b.comision_minima, b.margen_cambio,
     b.balance_inicial
     + COALESCE((
         SELECT SUM(CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META') THEN t.monto ELSE -t.monto END)
@@ -71,7 +74,11 @@ function validar(datos: DatosBilletera): DatosBilletera {
   if (!Number.isSafeInteger(comision_minima) || comision_minima < 0) {
     throw new ErrorValidacion('La comisión mínima no es válida.');
   }
-  return { ...datos, nombre, comision_porcentaje, comision_minima };
+  const margen_cambio = datos.margen_cambio ?? null;
+  if (margen_cambio !== null && !(margen_cambio >= -50 && margen_cambio <= 100)) {
+    throw new ErrorValidacion('El margen del banco debe estar entre -50 % y 100 %.');
+  }
+  return { ...datos, nombre, comision_porcentaje, comision_minima, margen_cambio };
 }
 
 export async function listarBilleteras(
@@ -94,9 +101,10 @@ export async function obtenerBilletera(db: BaseDatos, id: number): Promise<Bille
 export async function crearBilletera(db: BaseDatos, datos: DatosBilletera): Promise<number> {
   const d = validar(datos);
   const r = await db.runAsync(
-    `INSERT INTO billeteras (nombre, moneda, balance_inicial, icono, color_hex, comision_porcentaje, comision_minima)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!],
+    `INSERT INTO billeteras
+       (nombre, moneda, balance_inicial, icono, color_hex, comision_porcentaje, comision_minima, margen_cambio)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!, d.margen_cambio!],
   );
   return r.lastInsertRowId;
 }
@@ -126,8 +134,8 @@ export async function actualizarBilletera(
   }
   await db.runAsync(
     `UPDATE billeteras SET nombre = ?, moneda = ?, balance_inicial = ?, icono = ?, color_hex = ?,
-       comision_porcentaje = ?, comision_minima = ? WHERE id = ?`,
-    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!, id],
+       comision_porcentaje = ?, comision_minima = ?, margen_cambio = ? WHERE id = ?`,
+    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!, d.margen_cambio!, id],
   );
 }
 
