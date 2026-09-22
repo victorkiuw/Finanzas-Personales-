@@ -90,6 +90,13 @@ export default function PantallaAjustes() {
           onPress={() => router.push('/categorias')}
         />
         <List.Item
+          title="Presupuestos mensuales"
+          description="Límite de gasto por categoría"
+          left={(p) => <List.Icon {...p} icon="chart-donut" />}
+          right={(p) => <List.Icon {...p} icon="chevron-right" />}
+          onPress={() => router.push('/presupuestos')}
+        />
+        <List.Item
           title="Comisión de Pago Móvil"
           description="Se configura en cada billetera: Billeteras → billetera → lápiz"
           left={(p) => <List.Icon {...p} icon="bank-transfer" />}

@@ -5,12 +5,15 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, Text, useTheme } from 'react-native-paper';
 
 import { CintaTasas } from '../../components/CintaTasas';
+import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
 import { BarrasCategorias, ColumnasMensuales, coloresSeries } from '../../components/graficos';
 import { ItemMovimiento } from '../../components/ItemMovimiento';
 import { ResumenSaldo } from '../../components/ResumenSaldo';
 import { useTasas } from '../../components/TasasProvider';
 import { listarBilleteras, type Billetera } from '../../db/billeteras';
+import { listarCategorias, type Categoria } from '../../db/categorias';
 import { listarMetas, type Meta } from '../../db/metas';
+import { estadoPresupuestos, listarPresupuestos, type Presupuesto } from '../../db/presupuestos';
 import { listarMovimientos, type Movimiento } from '../../db/movimientos';
 import {
   Conversor,
@@ -37,6 +40,8 @@ interface Datos {
   recientes: Movimiento[];
   filas: FilaReporte[];
   historial: { dia: string; tasa: number }[];
+  presupuestos: Presupuesto[];
+  categorias: Categoria[];
 }
 
 export default function PantallaInicio() {
@@ -54,14 +59,16 @@ export default function PantallaInicio() {
     // Se leen los 6 meses del gráfico; el mes elegido es el último.
     const desde = rangoMes(mes, -(MESES_GRAFICO - 1)).desde;
     const hasta = rangoMes(mes).hasta;
-    const [billeteras, metas, recientes, filas, historial] = await Promise.all([
+    const [billeteras, metas, recientes, filas, historial, presupuestos, categorias] = await Promise.all([
       listarBilleteras(db),
       listarMetas(db),
       listarMovimientos(db, { limite: 5 }),
       filasDeReporte(db, desde, hasta),
       listarHistorial(db, referencia),
+      listarPresupuestos(db),
+      listarCategorias(db, 'GASTO', { incluirArchivadas: true }),
     ]);
-    setDatos({ billeteras, metas, recientes, filas, historial });
+    setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
   }, [db, mes, referencia, versionHistorial]);
 
@@ -78,6 +85,7 @@ export default function PantallaInicio() {
     const delMes = datos.filas.filter((f) => claveDia(f.fecha).startsWith(clave));
     const meses = Array.from({ length: MESES_GRAFICO }, (_, i) => new Date(mes.getFullYear(), mes.getMonth() - (MESES_GRAFICO - 1) + i, 1));
     return {
+      presupuestos: estadoPresupuestos(datos.presupuestos, datos.categorias, delMes, conversor),
       resumen: resumirPeriodo(delMes, conversor, monedaBase),
       porMes: totalesPorMes(datos.filas, conversor, monedaBase, meses.map(claveMes)),
       etiquetas: meses.map((d) => MESES_CORTOS[d.getMonth()]),
@@ -103,7 +111,7 @@ export default function PantallaInicio() {
     );
   }
 
-  const { resumen, porMes, etiquetas } = reporte;
+  const { resumen, porMes, etiquetas, presupuestos } = reporte;
   const colores = coloresSeries(tema.dark);
   const esMesActual = claveMes(mes) === claveMes(new Date());
   const cambiarMes = (delta: number) => setMes(new Date(mes.getFullYear(), mes.getMonth() + delta, 1));
@@ -175,6 +183,22 @@ export default function PantallaInicio() {
             {`Montos en ${monedaBase === 'BS' ? 'bolívares' : 'dólares'}, cada movimiento convertido con la tasa ${NOMBRE_PAR[referencia]} de su día. No incluye transferencias ni metas.`}
             {resumen.incompleto ? ' Faltan tasas para convertir algunos movimientos en Bs.' : ''}
           </Text>
+
+          <Card mode="outlined">
+            <Card.Title
+              title="Presupuestos del mes"
+              right={() => <Button onPress={() => router.push('/presupuestos')}>{presupuestos.length ? 'Editar' : 'Crear'}</Button>}
+            />
+            <Card.Content>
+              {presupuestos.length > 0 ? (
+                <BarrasPresupuesto estados={presupuestos} />
+              ) : (
+                <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
+                  Pon un límite mensual a tus categorías (comida, transporte…) y te avisaré al acercarte.
+                </Text>
+              )}
+            </Card.Content>
+          </Card>
 
           <Card mode="outlined">
             <Card.Title title="Gastos por categoría" />

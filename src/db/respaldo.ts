@@ -9,7 +9,7 @@ import { enTransaccion, type BaseDatos, type ValorSQL } from './tipos';
 export const APP_RESPALDO = 'finanzas-personales';
 
 /** En orden de inserción: primero lo que otras tablas referencian. */
-const TABLAS = ['billeteras', 'categorias', 'metas_ahorro', 'deudas', 'transacciones', 'tasas_cache', 'preferencias'] as const;
+const TABLAS = ['billeteras', 'categorias', 'presupuestos', 'metas_ahorro', 'deudas', 'transacciones', 'tasas_cache', 'preferencias'] as const;
 
 type Fila = Record<string, ValorSQL>;
 
@@ -26,7 +26,7 @@ export async function exportarDatos(db: BaseDatos, ahora = new Date()): Promise<
   const tablas = {} as Respaldo['tablas'];
   for (const t of TABLAS) {
     // Por id para que al importar los movimientos padre vayan antes que sus comisiones.
-    const orden = t === 'tasas_cache' ? 'par' : t === 'preferencias' ? 'clave' : 'id';
+    const orden = t === 'tasas_cache' ? 'par' : t === 'preferencias' ? 'clave' : t === 'presupuestos' ? 'categoria_id' : 'id';
     tablas[t] = (await db.getAllAsync<Fila>(`SELECT * FROM ${t} ORDER BY ${orden}`, [])).map((f) => ({ ...f }));
   }
   return { app: APP_RESPALDO, version: VERSION_ESQUEMA, exportado_en: ahora.toISOString(), tablas };

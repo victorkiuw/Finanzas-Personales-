@@ -193,6 +193,14 @@ const MIGRACIONES: string[] = [
   CREATE INDEX idx_transacciones_comision ON transacciones (comision_de);
   CREATE INDEX idx_transacciones_deuda ON transacciones (deuda_id);
   `,
+  // v7: presupuesto mensual por categoría de gasto.
+  `
+  CREATE TABLE presupuestos (
+    categoria_id INTEGER PRIMARY KEY REFERENCES categorias (id) ON DELETE CASCADE,
+    monto INTEGER NOT NULL CHECK (monto > 0),
+    moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS', 'USDT'))
+  );
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;
