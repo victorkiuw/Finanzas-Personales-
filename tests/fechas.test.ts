@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { claveDia, formatearDia, haceCuanto, rangoDias, rangoMes } from '../src/lib/fechas';
+import { claveDia, formatearDia, haceCuanto, mesesHasta, rangoDias, rangoMes } from '../src/lib/fechas';
 
 // Las pruebas se ejecutan con TZ=America/Caracas (ver script "test").
 
@@ -34,4 +34,13 @@ test('haceCuanto', () => {
   assert.equal(haceCuanto(antes(5), ahora), 'hace 5 min');
   assert.equal(haceCuanto(antes(180), ahora), 'hace 3 h');
   assert.equal(haceCuanto(new Date(2026, 8, 20, 9, 5).toISOString(), ahora), 'el 20 sep 2026 09:05');
+});
+
+test('mesesHasta', () => {
+  const hoy = new Date(2026, 8, 22);
+  assert.equal(mesesHasta('2026-09-30', hoy), 1);
+  assert.equal(mesesHasta('2026-10-22', hoy), 2);
+  assert.equal(mesesHasta('2026-10-21', hoy), 1);
+  assert.equal(mesesHasta('2027-09-22', hoy), 13);
+  assert.equal(mesesHasta('2026-01-01', hoy), 1);
 });

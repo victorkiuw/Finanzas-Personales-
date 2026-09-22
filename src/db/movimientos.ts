@@ -41,12 +41,15 @@ export interface Movimiento {
   monto_destino: number | null;
   tasa_cambio: number | null;
   meta_id: number | null;
+  meta_nombre: string | null;
+  meta_moneda: Moneda | null;
 }
 
 export interface FiltroMovimientos {
   /** Movimientos donde la billetera es origen o destino. */
   billeteraId?: number;
   categoriaId?: number;
+  metaId?: number;
   tipo?: TipoTransaccion;
   /** ISO inclusivo. */
   desde?: string;
@@ -63,11 +66,12 @@ const SELECT_MOVIMIENTO = `
     c.nombre AS categoria_nombre, c.color_hex AS categoria_color, c.icono AS categoria_icono,
     t.billetera_origen_id, o.nombre AS origen_nombre, o.moneda AS origen_moneda,
     t.billetera_destino_id, d.nombre AS destino_nombre, d.moneda AS destino_moneda,
-    t.monto_destino, t.tasa_cambio, t.meta_id
+    t.monto_destino, t.tasa_cambio, t.meta_id, m.nombre AS meta_nombre, m.moneda AS meta_moneda
   FROM transacciones t
   JOIN billeteras o ON o.id = t.billetera_origen_id
   LEFT JOIN billeteras d ON d.id = t.billetera_destino_id
-  LEFT JOIN categorias c ON c.id = t.categoria_id`;
+  LEFT JOIN categorias c ON c.id = t.categoria_id
+  LEFT JOIN metas_ahorro m ON m.id = t.meta_id`;
 
 interface FilaBilleteraMin {
   id: number;
@@ -166,6 +170,18 @@ export async function actualizarMovimiento(db: BaseDatos, id: number, datos: Dat
 }
 
 export async function eliminarMovimiento(db: BaseDatos, id: number): Promise<void> {
+  const m = await obtenerMovimiento(db, id);
+  if (m?.tipo === 'APORTE_META') {
+    // Quitar un aporte no puede dejar la meta con saldo negativo (ya se retiró ese dinero).
+    const fila = await db.getFirstAsync<{ saldo: number }>(
+      `SELECT COALESCE(SUM(CASE WHEN tipo = 'APORTE_META' THEN monto_destino ELSE -monto_destino END), 0) AS saldo
+       FROM transacciones WHERE meta_id = ?`,
+      [m.meta_id],
+    );
+    if ((fila?.saldo ?? 0) - (m.monto_destino ?? 0) < 0) {
+      throw new ErrorValidacion('No se puede eliminar: ese dinero ya se retiró de la meta. Elimina antes el retiro.');
+    }
+  }
   await db.runAsync(`DELETE FROM transacciones WHERE id = ?`, [id]);
 }
 
@@ -183,6 +199,10 @@ export async function listarMovimientos(db: BaseDatos, f: FiltroMovimientos = {}
   if (f.categoriaId !== undefined) {
     condiciones.push('t.categoria_id = ?');
     params.push(f.categoriaId);
+  }
+  if (f.metaId !== undefined) {
+    condiciones.push('t.meta_id = ?');
+    params.push(f.metaId);
   }
   if (f.tipo !== undefined) {
     condiciones.push('t.tipo = ?');

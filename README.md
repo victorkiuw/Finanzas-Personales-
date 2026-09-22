@@ -13,7 +13,7 @@ Especificación completa: ver el documento del proyecto (fases 1–5).
 | 1 | Expo + esquema SQLite + CRUD de billeteras | ✅ |
 | 2 | Registro de gastos, ingresos y transferencias | ✅ |
 | 3 | Tasas BCV / paralelo (ve.dolarapi.com) con caché y calculadora | ✅ |
-| 4 | Dashboard con gráficas y metas de ahorro | ⏳ |
+| 4 | Dashboard con gráficas y metas de ahorro | ✅ |
 | 5 | Pulido y APK final | ⏳ |
 
 ## Instalar en el teléfono (sin PC)
@@ -70,4 +70,10 @@ tests/                  pruebas con node:test
   cuándo se consultó. Cualquier tasa se puede corregir a mano.
 - **Conversión**: USD y USDT se consideran equivalentes (1:1); el bolívar se convierte con la tasa
   de referencia elegida (BCV o paralelo). El patrimonio total se muestra en USD o Bs.
+- **Reportes sin distorsión cambiaria**: la app descarga una vez al día el histórico diario de tasas
+  (`/v1/historicos/dolares`, desde 2023) y convierte cada ingreso/gasto con la tasa de **su** día.
+  Transferencias y movimientos de metas no cuentan como ingreso ni gasto.
+- **Gráficas** hechas con vistas (sin librerías nativas): gastos por categoría como barras
+  horizontales ordenadas con monto y % (se leen mejor que una dona en el teléfono) e ingresos vs.
+  gastos de los últimos 6 meses. Colores validados para daltonismo y contraste en claro/oscuro.
 - Formato de números venezolano: `Bs. 1.234,56`. Al escribir montos se acepta coma o punto decimal.

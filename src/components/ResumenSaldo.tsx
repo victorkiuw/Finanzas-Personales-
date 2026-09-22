@@ -1,27 +1,33 @@
 import { StyleSheet, View } from 'react-native';
 import { Card, Chip, Text, useTheme } from 'react-native-paper';
 
-import type { Billetera } from '../db/billeteras';
-import { totalesPorMoneda } from '../db/billeteras';
+import { totalesPorMoneda, type Billetera } from '../db/billeteras';
+import type { Meta } from '../db/metas';
 import { NOMBRE_PAR, PARES } from '../lib/api-tasas';
 import { totalConsolidado } from '../lib/conversion';
 import { formatearMonto, INFO_MONEDA, MONEDAS, type Moneda } from '../lib/moneda';
-import { formatearTasa } from '../lib/tasa';
 import { useTasas } from './TasasProvider';
 
 const BASES: Moneda[] = ['USD', 'BS'];
 
-/** Patrimonio total en la moneda base elegida, convertido con la tasa de referencia. */
-export function ResumenSaldo({ billeteras }: { billeteras: Billetera[] }) {
+/**
+ * Patrimonio total en la moneda base elegida, convertido con la tasa de referencia.
+ * Incluye lo apartado en metas: ese dinero salió de las billeteras pero sigue siendo tuyo.
+ */
+export function ResumenSaldo({ billeteras, metas = [] }: { billeteras: Billetera[]; metas?: Meta[] }) {
   const tema = useTheme();
   const { tasas, referencia, cambiarReferencia, monedaBase, cambiarMonedaBase } = useTasas();
   const color = tema.colors.onPrimaryContainer;
+  const ahorrado = metas.filter((m) => !m.archivada && m.saldo !== 0);
+  const saldos = [...billeteras.filter((b) => !b.archivada), ...ahorrado];
+  // Desglose por moneda de billeteras + metas.
   const totales = totalesPorMoneda(billeteras);
+  for (const m of ahorrado) totales[m.moneda] = (totales[m.moneda] ?? 0) + m.saldo;
   const monedas = MONEDAS.filter((m) => totales[m] !== undefined);
   const tasa = tasas[referencia]?.tasa;
   // Sin bolívares de por medio no hace falta tasa (USD y USDT van 1:1).
   const necesitaTasa = monedaBase === 'BS' || monedas.includes('BS');
-  const total = !necesitaTasa || tasa ? totalConsolidado(billeteras, monedaBase, tasa ?? 1) : null;
+  const total = !necesitaTasa || tasa ? totalConsolidado(saldos, monedaBase, tasa ?? 1) : null;
 
   return (
     <Card mode="contained" style={[styles.tarjeta, { backgroundColor: tema.colors.primaryContainer }]}>
@@ -61,11 +67,16 @@ export function ResumenSaldo({ billeteras }: { billeteras: Billetera[] }) {
               mode={referencia === p ? 'flat' : 'outlined'}
               onPress={() => cambiarReferencia(p)}
             >
-              {tasas[p] ? `${NOMBRE_PAR[p]} ${formatearTasa(tasas[p].tasa)}` : NOMBRE_PAR[p]}
+              {NOMBRE_PAR[p]}
             </Chip>
           ))}
         </View>
 
+        {ahorrado.length > 0 && (
+          <Text variant="bodySmall" style={{ color }}>
+            Incluye lo ahorrado en metas.
+          </Text>
+        )}
         {monedas.length > 1 || (monedas.length === 1 && monedas[0] !== monedaBase) ? (
           <View style={styles.desglose}>
             {monedas.map((m) => (

@@ -47,20 +47,56 @@ export function parsearRespuesta(json: unknown): Partial<Record<Par, TasaConsult
 
 type Fetch = (url: string, init?: { signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
-export async function consultarTasas(
-  fetchFn: Fetch = fetch,
-  tiempoEspera = TIEMPO_ESPERA_MS,
-): Promise<Partial<Record<Par, TasaConsultada>>> {
+/** GET con tiempo de espera; convierte los fallos de red en ErrorTasas legibles. */
+async function obtenerJson(url: string, fetchFn: Fetch, tiempoEspera: number): Promise<unknown> {
   const control = new AbortController();
   const temporizador = setTimeout(() => control.abort(), tiempoEspera);
   try {
-    const respuesta = await fetchFn(URL_TASAS, { signal: control.signal });
+    const respuesta = await fetchFn(url, { signal: control.signal });
     if (!respuesta.ok) throw new ErrorTasas(`El servidor de tasas respondió ${respuesta.status}.`);
-    return parsearRespuesta(await respuesta.json());
+    return await respuesta.json();
   } catch (e) {
     if (e instanceof ErrorTasas) throw e;
     throw new ErrorTasas(control.signal.aborted ? 'Se agotó el tiempo de espera.' : 'Sin conexión.');
   } finally {
     clearTimeout(temporizador);
   }
+}
+
+export async function consultarTasas(
+  fetchFn: Fetch = fetch,
+  tiempoEspera = TIEMPO_ESPERA_MS,
+): Promise<Partial<Record<Par, TasaConsultada>>> {
+  return parsearRespuesta(await obtenerJson(URL_TASAS, fetchFn, tiempoEspera));
+}
+
+export const URL_HISTORICO = 'https://ve.dolarapi.com/v1/historicos/dolares';
+
+export interface TasaDiaria {
+  par: Par;
+  /** "AAAA-MM-DD". */
+  dia: string;
+  tasa: number;
+}
+
+/**
+ * Respuesta de /v1/historicos/dolares: una entrada por fuente y día desde 2023,
+ * p. ej. { "fuente": "oficial", "promedio": 849.564, "fecha": "2026-09-21" }.
+ */
+export function parsearHistorico(json: unknown): TasaDiaria[] {
+  if (!Array.isArray(json)) throw new ErrorTasas('Respuesta inesperada del histórico de tasas.');
+  const tasas: TasaDiaria[] = [];
+  for (const item of json) {
+    if (!item || typeof item !== 'object') continue;
+    const { fuente, promedio, venta, compra, fecha } = item as Record<string, unknown>;
+    const par = typeof fuente === 'string' ? FUENTES[fuente.toLowerCase()] : undefined;
+    const tasa = [promedio, venta, compra].find((v): v is number => typeof v === 'number' && v > 0);
+    if (!par || !tasa || typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue;
+    tasas.push({ par, dia: fecha, tasa });
+  }
+  return tasas;
+}
+
+export async function consultarHistorico(fetchFn: Fetch = fetch, tiempoEspera = 20_000): Promise<TasaDiaria[]> {
+  return parsearHistorico(await obtenerJson(URL_HISTORICO, fetchFn, tiempoEspera));
 }

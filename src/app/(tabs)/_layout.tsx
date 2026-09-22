@@ -1,7 +1,15 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import Tabs from 'expo-router/js-tabs';
+import type { ComponentProps } from 'react';
+import type { ColorValue } from 'react-native';
 import { IconButton, useTheme } from 'react-native-paper';
+
+type NombreIcono = ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+const icono =
+  (name: NombreIcono) =>
+  ({ color, size }: { color: ColorValue; size: number }) => <MaterialCommunityIcons name={name} color={color} size={size} />;
 
 export default function TabsLayout() {
   const tema = useTheme();
@@ -18,12 +26,13 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: tema.colors.background },
       }}
     >
+      <Tabs.Screen name="index" options={{ title: 'Inicio', headerTitle: 'Resumen', tabBarIcon: icono('home') }} />
       <Tabs.Screen
-        name="index"
+        name="billeteras"
         options={{
           title: 'Billeteras',
           headerTitle: 'Mis billeteras',
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="wallet" color={color} size={size} />,
+          tabBarIcon: icono('wallet'),
           headerRight: () => (
             <IconButton
               icon="wallet-plus"
@@ -33,20 +42,11 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="movimientos"
-        options={{
-          title: 'Movimientos',
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="swap-vertical" color={color} size={size} />,
-        }}
-      />
+      <Tabs.Screen name="movimientos" options={{ title: 'Movimientos', tabBarIcon: icono('swap-vertical') }} />
+      <Tabs.Screen name="ahorros" options={{ title: 'Ahorros', headerTitle: 'Metas de ahorro', tabBarIcon: icono('piggy-bank') }} />
       <Tabs.Screen
         name="tasas"
-        options={{
-          title: 'Tasas',
-          headerTitle: 'Tasas y calculadora',
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calculator-variant" color={color} size={size} />,
-        }}
+        options={{ title: 'Tasas', headerTitle: 'Tasas y calculadora', tabBarIcon: icono('calculator-variant') }}
       />
     </Tabs>
   );

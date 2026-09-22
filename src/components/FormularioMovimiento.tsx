@@ -231,7 +231,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
             await eliminarMovimiento(db, id);
             router.back();
           } catch (e) {
-            Alert.alert('Error', String(e));
+            Alert.alert('No se pudo eliminar', e instanceof ErrorValidacion ? e.message : String(e));
           }
         },
       },
@@ -246,7 +246,15 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
     return (
       <View style={styles.contenido}>
         <Stack.Screen options={{ title: titulo }} />
-        <Text variant="bodyLarge">Este movimiento pertenece a una meta de ahorro y se gestiona desde Ahorros.</Text>
+        <Text variant="bodyLarge">
+          {`${original.tipo === 'APORTE_META' ? 'Aporte a' : 'Retiro de'} la meta "${original.meta_nombre}": ${formatearMonto(original.monto, original.origen_moneda)} ${original.tipo === 'APORTE_META' ? 'desde' : 'hacia'} ${original.origen_nombre}.`}
+        </Text>
+        <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
+          Los movimientos de metas no se editan; si te equivocaste, elimínalo y regístralo de nuevo desde Ahorros.
+        </Text>
+        <Button mode="text" icon="delete" textColor={tema.colors.error} onPress={confirmarEliminar}>
+          Eliminar movimiento
+        </Button>
       </View>
     );
   }

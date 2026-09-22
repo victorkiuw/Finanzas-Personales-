@@ -12,6 +12,8 @@ interface Props {
   movimiento: Movimiento;
   /** Si se indica, el monto muestra el efecto sobre esta billetera. */
   billeteraId?: number;
+  /** Si se indica, el monto se muestra en la moneda de la meta (lista de una meta). */
+  enMeta?: boolean;
   onPress: () => void;
 }
 
@@ -20,15 +22,15 @@ function titulo(m: Movimiento): string {
     case 'TRANSFERENCIA':
       return `${m.origen_nombre} → ${m.destino_nombre}`;
     case 'APORTE_META':
-      return 'Aporte a meta';
+      return `Aporte a ${m.meta_nombre ?? 'meta'}`;
     case 'RETIRO_META':
-      return 'Retiro de meta';
+      return `Retiro de ${m.meta_nombre ?? 'meta'}`;
     default:
       return m.categoria_nombre ?? 'Sin categoría';
   }
 }
 
-export function ItemMovimiento({ movimiento: m, billeteraId, onPress }: Props) {
+export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: Props) {
   const tema = useTheme();
   const verde = tema.dark ? COLOR_INGRESO_OSCURO : COLOR_INGRESO;
   const esTransferencia = m.tipo === 'TRANSFERENCIA';
@@ -36,7 +38,11 @@ export function ItemMovimiento({ movimiento: m, billeteraId, onPress }: Props) {
   let montoTexto: string;
   let color = tema.colors.onSurface;
   let detalleMonto: string | null = null;
-  if (billeteraId !== undefined) {
+  if (enMeta && m.meta_moneda) {
+    const entra = m.tipo === 'APORTE_META';
+    montoTexto = `${entra ? '+' : '-'}${formatearMonto(m.monto_destino ?? 0, m.meta_moneda)}`;
+    if (entra) color = verde;
+  } else if (billeteraId !== undefined) {
     const efecto = efectoEnBilletera(m, billeteraId);
     const moneda = m.billetera_destino_id === billeteraId && esTransferencia ? m.destino_moneda! : m.origen_moneda;
     montoTexto = `${efecto > 0 ? '+' : ''}${formatearMonto(efecto, moneda)}`;

@@ -85,6 +85,7 @@ export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movi
         <ItemMovimiento
           movimiento={item}
           billeteraId={filtro.billeteraId}
+          enMeta={filtro.metaId !== undefined}
           onPress={() => router.push(`/movimiento/${item.id}`)}
         />
       )}

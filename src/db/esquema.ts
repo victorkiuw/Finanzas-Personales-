@@ -107,6 +107,18 @@ const MIGRACIONES: string[] = [
     valor TEXT NOT NULL
   );
   `,
+  // v3: tasa de cada día, para convertir los movimientos pasados con la tasa de su fecha.
+  `
+  CREATE TABLE historial_tasas (
+    par TEXT NOT NULL CHECK (par IN ('BCV', 'PARALELO')),
+    dia TEXT NOT NULL,
+    tasa REAL NOT NULL CHECK (tasa > 0),
+    PRIMARY KEY (par, dia)
+  );
+
+  INSERT INTO historial_tasas (par, dia, tasa)
+    SELECT par, date(COALESCE(consultada_en, ultima_actualizacion), 'localtime'), tasa FROM tasas_cache;
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

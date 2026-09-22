@@ -1,4 +1,13 @@
-import { consultarTasas, PARES, type Par, type TasaConsultada } from '../lib/api-tasas';
+import {
+  consultarHistorico,
+  consultarTasas,
+  PARES,
+  type Par,
+  type TasaConsultada,
+  type TasaDiaria,
+} from '../lib/api-tasas';
+import { claveDia } from '../lib/fechas';
+import { guardarPreferencia, leerPreferencia } from './preferencias';
 import type { BaseDatos } from './tipos';
 
 export interface TasaGuardada {
@@ -39,6 +48,39 @@ export async function guardarTasa(
        consultada_en = excluded.consultada_en, origen = excluded.origen`,
     [par, t.tasa, t.fecha, ahora.toISOString(), origen],
   );
+  // La tasa vigente también queda como la del día de hoy en el historial.
+  await guardarHistorial(db, [{ par, dia: claveDia(ahora.toISOString()), tasa: t.tasa }]);
+}
+
+export async function guardarHistorial(db: BaseDatos, tasas: TasaDiaria[]): Promise<void> {
+  // Por lotes para no pasar el límite de parámetros de SQLite.
+  for (let i = 0; i < tasas.length; i += 200) {
+    const lote = tasas.slice(i, i + 200);
+    await db.runAsync(
+      `INSERT OR REPLACE INTO historial_tasas (par, dia, tasa) VALUES ${lote.map(() => '(?, ?, ?)').join(', ')}`,
+      lote.flatMap((t) => [t.par, t.dia, t.tasa]),
+    );
+  }
+}
+
+export async function listarHistorial(db: BaseDatos, par: Par): Promise<{ dia: string; tasa: number }[]> {
+  return db.getAllAsync(`SELECT dia, tasa FROM historial_tasas WHERE par = ? ORDER BY dia`, [par]);
+}
+
+const CLAVE_HISTORICO = 'historico_sincronizado_en';
+
+/** Descarga el histórico diario como máximo una vez al día. Devuelve true si lo actualizó. */
+export async function sincronizarHistorico(
+  db: BaseDatos,
+  consultar: () => Promise<TasaDiaria[]> = () => consultarHistorico(),
+  ahora = new Date(),
+): Promise<boolean> {
+  const ultima = await leerPreferencia(db, CLAVE_HISTORICO);
+  if (ultima && claveDia(ultima) === claveDia(ahora.toISOString())) return false;
+  const tasas = await consultar();
+  await guardarHistorial(db, tasas);
+  await guardarPreferencia(db, CLAVE_HISTORICO, ahora.toISOString());
+  return true;
 }
 
 /**

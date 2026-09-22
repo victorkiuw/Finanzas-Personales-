@@ -3,7 +3,14 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { AppState } from 'react-native';
 
 import { guardarPreferencia, leerPreferencia } from '../db/preferencias';
-import { actualizarTasasDesdeApi, guardarTasa, obtenerTasas, tasasVencidas, type Tasas } from '../db/tasas';
+import {
+  actualizarTasasDesdeApi,
+  guardarTasa,
+  obtenerTasas,
+  sincronizarHistorico,
+  tasasVencidas,
+  type Tasas,
+} from '../db/tasas';
 import { ErrorTasas, type Par } from '../lib/api-tasas';
 import { esMoneda, type Moneda } from '../lib/moneda';
 
@@ -21,6 +28,8 @@ interface ContextoTasas {
   /** Moneda en la que se muestra el total consolidado. */
   monedaBase: Moneda;
   cambiarMonedaBase: (m: Moneda) => void;
+  /** Cambia cada vez que se actualiza el historial de tasas (para recalcular reportes). */
+  versionHistorial: number;
 }
 
 const Contexto = createContext<ContextoTasas | null>(null);
@@ -35,6 +44,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [referencia, setReferencia] = useState<Par>('PARALELO');
   const [monedaBase, setMonedaBase] = useState<Moneda>('USD');
+  const [versionHistorial, setVersionHistorial] = useState(0);
   const tasasRef = useRef<Tasas>({});
   const enCurso = useRef(false);
 
@@ -48,6 +58,9 @@ export function TasasProvider({ children }: { children: ReactNode }) {
         tasasRef.current = nuevas;
         setTasas(nuevas);
         setError(null);
+        // El histórico diario (para reportes) se baja como mucho una vez al día; si falla no es grave.
+        await sincronizarHistorico(db).catch(() => false);
+        setVersionHistorial((v) => v + 1);
       } catch (e) {
         setError(e instanceof ErrorTasas ? e.message : 'No se pudieron actualizar las tasas.');
       } finally {
@@ -85,6 +98,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
       const nuevas = await obtenerTasas(db);
       tasasRef.current = nuevas;
       setTasas(nuevas);
+      setVersionHistorial((v) => v + 1);
     },
     [db],
   );
@@ -117,6 +131,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
         cambiarReferencia,
         monedaBase,
         cambiarMonedaBase,
+        versionHistorial,
       }}
     >
       {children}

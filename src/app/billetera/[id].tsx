@@ -54,19 +54,20 @@ export default function DetalleBilletera() {
       </Card>
       {!billetera.archivada && (
         <View style={styles.acciones}>
-          <Button mode="contained-tonal" icon="arrow-up" onPress={() => nuevo('GASTO')} style={styles.flex}>
+          <Button mode="contained-tonal" compact icon="arrow-up" onPress={() => nuevo('GASTO')} style={styles.flex}>
             Gasto
           </Button>
-          <Button mode="contained-tonal" icon="arrow-down" onPress={() => nuevo('INGRESO')} style={styles.flex}>
+          <Button mode="contained-tonal" compact icon="arrow-down" onPress={() => nuevo('INGRESO')} style={styles.flex}>
             Ingreso
           </Button>
           <Button
             mode="contained-tonal"
+            compact
             icon="swap-horizontal"
             onPress={() => nuevo('TRANSFERENCIA')}
             style={styles.flex}
           >
-            Transferir
+            Mover
           </Button>
         </View>
       )}

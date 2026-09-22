@@ -65,3 +65,17 @@ export function haceCuanto(iso: string, ahora: Date = new Date()): string {
   const d = new Date(iso);
   return `el ${formatearFechaCorta(d)} ${formatearHora(iso)}`;
 }
+
+/** Meses que quedan (contando el actual) hasta una fecha "AAAA-MM-DD"; mínimo 1. */
+export function mesesHasta(fechaObjetivo: string, hoy: Date = new Date()): number {
+  const [a, m, d] = fechaObjetivo.split('-').map(Number);
+  const meses = (a - hoy.getFullYear()) * 12 + (m - 1) - hoy.getMonth();
+  // Si el día objetivo ya pasó dentro de su mes, ese mes no cuenta completo.
+  return Math.max(d >= hoy.getDate() ? meses : meses - 1, 0) + 1;
+}
+
+/** "AAAA-MM-DD" (fecha sin hora) a texto corto, p. ej. "15 ene 2027". */
+export function fechaSimpleLegible(fecha: string): string {
+  const [a, m, d] = fecha.split('-').map(Number);
+  return formatearFechaCorta(new Date(a, m - 1, d));
+}
