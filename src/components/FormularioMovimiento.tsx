@@ -8,6 +8,7 @@ import {
   Button,
   Chip,
   HelperText,
+  IconButton,
   SegmentedButtons,
   Switch,
   Text,
@@ -16,6 +17,7 @@ import {
 } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
+import { dividirGasto, partesIguales, type ParteDivision } from '../db/dividir';
 import { crearPlantilla } from '../db/plantillas';
 import { listarCategorias, type Categoria } from '../db/categorias';
 import {
@@ -40,6 +42,7 @@ import {
   type DestinoPago,
 } from '../lib/comision';
 import { SelectorBilletera } from './SelectorBilletera';
+import { useTasas } from './TasasProvider';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
 interface Props {
@@ -96,6 +99,10 @@ export function FormularioMovimiento({
   const [usarComision, setUsarComision] = useState<boolean | null>(null);
   // Vacío = se calcula sola con la configuración de la billetera.
   const [comisionTexto, setComisionTexto] = useState('');
+  // Dividir el gasto con otras personas (lo de ellas queda como préstamo).
+  const [dividir, setDividir] = useState(false);
+  const [partes, setPartes] = useState<{ persona: string; montoTexto: string }[]>([{ persona: '', montoTexto: '' }]);
+  const { tasas, referencia } = useTasas();
   // Pago Móvil desde bolívares: a persona o a comercio (null = según la billetera); 'OTRA' = monto a mano.
   const [destinoPago, setDestinoPago] = useState<DestinoPago | 'OTRA' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,6 +269,10 @@ export function FormularioMovimiento({
   const aMano = aQuien === 'OTRA' && comisionTexto.trim() !== '';
   const comision = !comisionActiva ? 0 : aMano ? parsearMonto(comisionTexto) : comisionAuto;
 
+  const dividiendo = !editando && tipo === 'GASTO' && dividir;
+  const deOtros = partes.reduce((suma, p) => suma + (parsearMonto(p.montoTexto) ?? 0), 0);
+  const tuParte = monto !== null && monto > 0 ? monto - deOtros : null;
+
   /** Guarda billetera, categoría y monto como un botón de Inicio para registrarlo con un toque. */
   const guardarComoRapido = async () => {
     if (!origenId || !categoriaId || tipo === 'TRANSFERENCIA') {
@@ -309,7 +320,10 @@ export function FormularioMovimiento({
       comision: original?.comision_de != null ? undefined : comision || 0,
     };
     try {
-      if (id === undefined) await crearMovimiento(db, datos);
+      if (id === undefined && dividiendo) {
+        const lista: ParteDivision[] = partes.map((p) => ({ persona: p.persona, monto: parsearMonto(p.montoTexto) ?? 0 }));
+        await dividirGasto(db, { ...datos, categoria_id: categoriaId }, lista, tasas[referencia]?.tasa ?? null);
+      } else if (id === undefined) await crearMovimiento(db, datos);
       else await actualizarMovimiento(db, id, datos);
       router.back();
     } catch (e) {
@@ -529,6 +543,72 @@ export function FormularioMovimiento({
                 Nueva
               </Chip>
             </View>
+          </View>
+        )}
+
+        {!editando && tipo === 'GASTO' && origen && (
+          <View style={styles.bloque}>
+            <View style={styles.filaSwitch}>
+              <View style={styles.flex}>
+                <Text variant="labelLarge">Dividir con otras personas</Text>
+                <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                  Tu parte queda como gasto y la de cada uno como algo que te debe.
+                </Text>
+              </View>
+              <Switch value={dividir} onValueChange={setDividir} accessibilityLabel="Dividir el gasto" />
+            </View>
+            {dividir && (
+              <>
+                {partes.map((p, i) => (
+                  <View key={i} style={styles.filaCampos}>
+                    <TextInput
+                      label="Persona"
+                      value={p.persona}
+                      onChangeText={(t) => setPartes((l) => l.map((x, j) => (j === i ? { ...x, persona: t } : x)))}
+                      mode="outlined"
+                      dense
+                      style={styles.flex}
+                    />
+                    <TextInput
+                      label="Su parte"
+                      value={p.montoTexto}
+                      onChangeText={(t) => setPartes((l) => l.map((x, j) => (j === i ? { ...x, montoTexto: t } : x)))}
+                      keyboardType="decimal-pad"
+                      mode="outlined"
+                      dense
+                      style={styles.flex}
+                      right={<TextInput.Affix text={INFO_MONEDA[origen.moneda].corto} />}
+                    />
+                    {partes.length > 1 && (
+                      <IconButton icon="close" accessibilityLabel="Quitar persona" onPress={() => setPartes((l) => l.filter((_, j) => j !== i))} />
+                    )}
+                  </View>
+                ))}
+                <View style={styles.chips}>
+                  <Chip compact icon="account-plus" onPress={() => setPartes((l) => [...l, { persona: '', montoTexto: '' }])}>
+                    Otra persona
+                  </Chip>
+                  <Chip
+                    compact
+                    icon="division"
+                    onPress={() => {
+                      if (!monto || monto <= 0) return;
+                      const { cadaUno } = partesIguales(monto, partes.length);
+                      setPartes((l) => l.map((x) => ({ ...x, montoTexto: centimosATexto(cadaUno) })));
+                    }}
+                  >
+                    Partes iguales
+                  </Chip>
+                </View>
+                {monto !== null && monto > 0 && (
+                  <HelperText type={tuParte !== null && tuParte > 0 ? 'info' : 'error'}>
+                    {tuParte !== null && tuParte > 0
+                      ? `Tu parte: ${formatearMonto(tuParte, origen.moneda)}. Sale de ${origen.nombre}: ${formatearMonto(monto, origen.moneda)}.`
+                      : 'Las partes de los demás no pueden sumar el total.'}
+                  </HelperText>
+                )}
+              </>
+            )}
           </View>
         )}
 
