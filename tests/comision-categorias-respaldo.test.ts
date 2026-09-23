@@ -154,3 +154,18 @@ test('respaldo: rechaza archivos ajenos o de versiones futuras, e importa copias
   assert.equal(b.comision_porcentaje, 0);
   assert.equal((await listarCategorias(db)).length, 1);
 });
+
+test('comisión de Pago Móvil a persona o a comercio', async () => {
+  const { comisionPara, destinoPorDefecto, calcularComision, COMISION_COMERCIO } = await import('../src/lib/comision');
+  const sinConfig = { porcentaje: 0, minima: 0 };
+  // Bs. 10.000 a persona: 0,3 % = Bs. 30; a comercio: 1,5 % = Bs. 150; montos pequeños pagan el mínimo de Bs. 14.
+  assert.equal(calcularComision(1000000, comisionPara('PERSONA', sinConfig)), 3000);
+  assert.equal(calcularComision(1000000, comisionPara('COMERCIO', sinConfig)), 15000);
+  assert.equal(calcularComision(50000, comisionPara('COMERCIO', sinConfig)), 1400);
+  // Si el banco cobra menos a persona (configurado en la billetera), se respeta.
+  const banco = { porcentaje: 0.2, minima: 1000 };
+  assert.deepEqual(comisionPara('PERSONA', banco), banco);
+  assert.deepEqual(comisionPara('COMERCIO', banco), COMISION_COMERCIO);
+  assert.equal(destinoPorDefecto(banco), 'PERSONA');
+  assert.equal(destinoPorDefecto(COMISION_COMERCIO), 'COMERCIO');
+});

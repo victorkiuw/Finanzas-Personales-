@@ -117,6 +117,11 @@ export default function PantallaTasas() {
                 <Text variant="labelLarge" style={{ color: tema.colors.onSurfaceVariant }}>
                   {`Con tasa ${NOMBRE_PAR[par]}`}
                 </Text>
+                {tasa && (
+                  <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                    {`$1 = Bs. ${formatearTasa(tasa)}${cambio.euro ? ` · €1 = Bs. ${formatearTasa(cambio.euro)} · €1 = $${formatearTasa(cambio.euro / tasa)}` : ' · sin tasa del euro'}`}
+                  </Text>
+                )}
                 {!tasa ? (
                   <Text variant="bodyMedium">Sin tasa disponible.</Text>
                 ) : (

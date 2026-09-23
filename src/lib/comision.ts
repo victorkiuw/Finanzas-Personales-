@@ -33,3 +33,24 @@ export function describirComision(c: ConfigComision, formatear: (centimos: numbe
   const pct = `${String(c.porcentaje).replace('.', ',')} %`;
   return c.minima > 0 ? `${pct} (mín. ${formatear(c.minima)})` : pct;
 }
+
+export type DestinoPago = 'PERSONA' | 'COMERCIO';
+
+export const COMISION_PERSONA: ConfigComision = { porcentaje: 0.3, minima: 1400 };
+export const COMISION_COMERCIO: ConfigComision = { porcentaje: 1.5, minima: 1400 };
+
+/**
+ * Comisión de Pago Móvil según a quién se paga. A persona se usa la que el
+ * usuario configuró en la billetera (su banco puede cobrar menos que el máximo)
+ * salvo que sea la de comercio; a comercio, el máximo del BCV.
+ */
+export function comisionPara(destino: DestinoPago, billetera: ConfigComision): ConfigComision {
+  if (destino === 'COMERCIO') return COMISION_COMERCIO;
+  const propia = tieneComision(billetera) && billetera.porcentaje < COMISION_COMERCIO.porcentaje;
+  return propia ? billetera : COMISION_PERSONA;
+}
+
+/** A quién se paga por defecto: a comercio si la billetera está configurada con esa tarifa. */
+export function destinoPorDefecto(billetera: ConfigComision): DestinoPago {
+  return billetera.porcentaje >= COMISION_COMERCIO.porcentaje ? 'COMERCIO' : 'PERSONA';
+}

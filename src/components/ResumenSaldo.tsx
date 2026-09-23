@@ -11,7 +11,7 @@ import { useTasas } from './TasasProvider';
 
 const BASES: Moneda[] = ['USD', 'BS'];
 
-/** Colores fijos de los selectores sobre el verde: el elegido oscuro, los demás claros. */
+/** Colores fijos de los selectores sobre el verde: el elegido oscuro y un poco más pequeño, los demás claros. */
 const SELECTOR = {
   elegido: { fondo: '#0B3A26', texto: '#FFFFFF', borde: '#0B3A26' },
   libre: { fondo: '#E3F6EC', texto: '#0B3A26', borde: '#9CCFB3' },
@@ -24,7 +24,7 @@ function Opcion({ texto, elegida, onPress }: { texto: string; elegida: boolean; 
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: elegida }}
-      style={[styles.opcion, { backgroundColor: c.fondo, borderColor: c.borde }]}
+      style={[styles.opcion, { backgroundColor: c.fondo, borderColor: c.borde }, elegida && styles.elegida]}
     >
       <Text variant="labelLarge" style={{ color: c.texto, fontWeight: elegida ? '700' : '500' }}>
         {texto}
@@ -128,6 +128,7 @@ const styles = StyleSheet.create({
   total: { fontVariant: ['tabular-nums'], fontWeight: '700' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' },
   opcion: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, borderWidth: 1, minHeight: 36, justifyContent: 'center' },
+  elegida: { transform: [{ scale: 0.9 }] },
   separador: { width: 4 },
   desglose: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', columnGap: 16 },
   linea: { fontVariant: ['tabular-nums'] },

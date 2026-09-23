@@ -30,7 +30,14 @@ import {
 import { formatearFechaCorta, formatearHora } from '../lib/fechas';
 import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
 import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
-import { calcularComision, describirComision, tieneComision } from '../lib/comision';
+import {
+  calcularComision,
+  comisionPara,
+  describirComision,
+  destinoPorDefecto,
+  tieneComision,
+  type DestinoPago,
+} from '../lib/comision';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
@@ -70,6 +77,8 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
   const [usarComision, setUsarComision] = useState<boolean | null>(null);
   // Vacío = se calcula sola con la configuración de la billetera.
   const [comisionTexto, setComisionTexto] = useState('');
+  // Pago Móvil desde bolívares: a persona o a comercio (null = según la billetera); 'OTRA' = monto a mano.
+  const [destinoPago, setDestinoPago] = useState<DestinoPago | 'OTRA' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -115,7 +124,10 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
       setFecha(new Date(m.fecha));
       setNota(m.nota ?? '');
       setUsarComision(m.comision !== null);
-      if (m.comision !== null) setComisionTexto(centimosATexto(m.comision));
+      if (m.comision !== null) {
+        setComisionTexto(centimosATexto(m.comision));
+        setDestinoPago('OTRA');
+      }
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
   }, [db, id, billeteraInicial]);
@@ -210,14 +222,19 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
   };
 
   // Comisión bancaria (Pago Móvil): se propone según la billetera de origen.
-  const configComision = {
+  const configBilletera = {
     porcentaje: origen?.comision_porcentaje ?? 0,
     minima: origen?.comision_minima ?? 0,
   };
   const admiteComision = tipo !== 'INGRESO' && origen !== null && original?.comision_de == null;
-  const comisionActiva = admiteComision && (usarComision ?? tieneComision(configComision));
+  // En bolívares se elige a quién se paga y la comisión se calcula sola; en otras monedas, a mano.
+  const pagoMovil = origen?.moneda === 'BS';
+  const aQuien = pagoMovil ? (destinoPago ?? destinoPorDefecto(configBilletera)) : 'OTRA';
+  const configComision = aQuien === 'OTRA' ? configBilletera : comisionPara(aQuien, configBilletera);
+  const comisionActiva = admiteComision && (usarComision ?? tieneComision(configBilletera));
   const comisionAuto = monto && monto > 0 ? calcularComision(monto, configComision) : 0;
-  const comision = !comisionActiva ? 0 : comisionTexto.trim() !== '' ? parsearMonto(comisionTexto) : comisionAuto;
+  const aMano = aQuien === 'OTRA' && comisionTexto.trim() !== '';
+  const comision = !comisionActiva ? 0 : aMano ? parsearMonto(comisionTexto) : comisionAuto;
 
   const guardar = async () => {
     if (!monto || monto <= 0) {
@@ -486,7 +503,32 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
                 accessibilityLabel="Cobrar comisión bancaria"
               />
             </View>
-            {comisionActiva && (
+            {comisionActiva && pagoMovil && (
+              <View style={styles.chips}>
+                {(
+                  [
+                    ['PERSONA', 'A persona'],
+                    ['COMERCIO', 'A comercio'],
+                    ['OTRA', 'Otro monto'],
+                  ] as const
+                ).map(([valor, texto]) => {
+                  const cfg = valor === 'OTRA' ? null : comisionPara(valor, configBilletera);
+                  return (
+                    <Chip
+                      key={valor}
+                      compact
+                      selected={aQuien === valor}
+                      showSelectedCheck
+                      mode={aQuien === valor ? 'flat' : 'outlined'}
+                      onPress={() => setDestinoPago(valor)}
+                    >
+                      {cfg ? `${texto} · ${String(cfg.porcentaje).replace('.', ',')} %` : texto}
+                    </Chip>
+                  );
+                })}
+              </View>
+            )}
+            {comisionActiva && aQuien === 'OTRA' && (
               <TextInput
                 label="Monto de la comisión"
                 value={comisionTexto}
@@ -498,12 +540,17 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
                 right={<TextInput.Affix text={INFO_MONEDA[origen.moneda].corto} />}
               />
             )}
-            {comisionActiva && comisionTexto.trim() === '' && (
+            {comisionActiva && !aMano && (
               <HelperText type="info">
                 {tieneComision(configComision)
-                  ? `Calculada: ${describirComision(configComision, (c) => formatearMonto(c, origen.moneda))}. Escribe otro monto si tu banco cobró distinto.`
+                  ? `Calculada: ${describirComision(configComision, (c) => formatearMonto(c, origen.moneda))}.${aQuien === 'OTRA' ? ' Escribe otro monto si tu banco cobró distinto.' : ''}`
                   : 'Escribe cuánto te cobró el banco. Puedes configurar la comisión en la billetera.'}
               </HelperText>
+            )}
+            {comisionActiva && monto !== null && monto > 0 && comision !== null && comision > 0 && (
+              <Text variant="bodyMedium">
+                {`Total que sale: ${formatearMonto(monto + comision, origen.moneda)} (${formatearMonto(monto, origen.moneda)} + ${formatearMonto(comision, origen.moneda)} de comisión)`}
+              </Text>
             )}
           </View>
         )}
