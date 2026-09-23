@@ -24,7 +24,7 @@ interface Props {
  */
 export function SugerenciasTasa({ de, a, billeteras, onElegir }: Props) {
   const db = useSQLiteContext();
-  const { tasas } = useTasas();
+  const { tasas, propia } = useTasas();
   const [ultima, setUltima] = useState<number | null>(null);
 
   useEffect(() => {
@@ -51,6 +51,9 @@ export function SugerenciasTasa({ de, a, billeteras, onElegir }: Props) {
       const t = tasas[p]?.tasa;
       if (t) opciones.push({ clave: p, texto: `${NOMBRE_PAR[p]} ${formatearTasa(t)}`, tasa: t, icono: 'lightning-bolt' });
     }
+  }
+  if (bolivarDolar && propia) {
+    opciones.push({ clave: 'PROPIA', texto: `${propia.nombre} ${formatearTasa(propia.tasa)}`, tasa: propia.tasa, icono: 'star' });
   }
   if (bolivarEuro && euro) {
     opciones.push({ clave: 'EURO', texto: `${NOMBRE_PAR.EURO} ${formatearTasa(euro)}`, tasa: euro, icono: 'lightning-bolt' });

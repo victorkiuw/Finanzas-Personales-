@@ -12,7 +12,7 @@ const ETIQUETA: Record<Par, string> = { ...NOMBRE_PAR, EURO: '€' };
 /** Resumen compacto de las tasas activas; al tocarlo abre la pestaña de tasas. */
 export function CintaTasas() {
   const tema = useTheme();
-  const { tasas, actualizando, error } = useTasas();
+  const { tasas, actualizando, error, propia } = useTasas();
   const consultadas = PARES.map((p) => tasas[p]?.consultada_en).filter((f): f is string => !!f);
   const masVieja = consultadas.sort()[0];
 
@@ -30,6 +30,7 @@ export function CintaTasas() {
             {TODOS_LOS_PARES.filter((p) => p !== 'EURO' || tasas.EURO)
               .map((p) => `${ETIQUETA[p]} ${tasas[p] ? formatearTasa(tasas[p].tasa) : '—'}`)
               .join('  ·  ')}
+            {propia ? `  ·  ${propia.nombre} ${formatearTasa(propia.tasa)}` : ''}
           </Text>
           <Text variant="bodySmall" style={{ color: error ? tema.colors.error : tema.colors.onSurfaceVariant }}>
             {estado}

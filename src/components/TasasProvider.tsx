@@ -35,12 +35,16 @@ interface ContextoTasas {
   cambiarMonedaBase: (m: Moneda) => void;
   /** Cambia cada vez que se actualiza el historial de tasas (para recalcular reportes). */
   versionHistorial: number;
+  /** Tasa propia (la de tu banco o casa de cambio), en Bs. por dólar. */
+  propia: { nombre: string; tasa: number } | null;
+  guardarPropia: (propia: { nombre: string; tasa: number } | null) => Promise<void>;
 }
 
 const Contexto = createContext<ContextoTasas | null>(null);
 
 const CLAVE_REFERENCIA = 'tasa_referencia';
 const CLAVE_BASE = 'moneda_base';
+const CLAVE_PROPIA = 'tasa_propia';
 
 export function TasasProvider({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
@@ -50,6 +54,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
   const [referencia, setReferencia] = useState<ParDolar>('PARALELO');
   const [monedaBase, setMonedaBase] = useState<Moneda>('USD');
   const [versionHistorial, setVersionHistorial] = useState(0);
+  const [propia, setPropia] = useState<{ nombre: string; tasa: number } | null>(null);
   const tasasRef = useRef<Tasas>({});
   const enCurso = useRef(false);
 
@@ -79,11 +84,18 @@ export function TasasProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const [cache, ref, base] = await Promise.all([
+      const [cache, ref, base, guardada] = await Promise.all([
         obtenerTasas(db),
         leerPreferencia(db, CLAVE_REFERENCIA),
         leerPreferencia(db, CLAVE_BASE),
+        leerPreferencia(db, CLAVE_PROPIA),
       ]);
+      try {
+        const p = guardada ? JSON.parse(guardada) : null;
+        if (p && typeof p.nombre === 'string' && p.tasa > 0) setPropia(p);
+      } catch {
+        // Preferencia dañada: se ignora.
+      }
       tasasRef.current = cache;
       setTasas(cache);
       if (ref === 'BCV' || ref === 'PARALELO') setReferencia(ref);
@@ -117,6 +129,15 @@ export function TasasProvider({ children }: { children: ReactNode }) {
     [db],
   );
 
+  const guardarPropia = useCallback(
+    async (p: { nombre: string; tasa: number } | null) => {
+      if (p) await guardarPreferencia(db, CLAVE_PROPIA, JSON.stringify(p));
+      else await db.runAsync(`DELETE FROM preferencias WHERE clave = ?`, [CLAVE_PROPIA]);
+      setPropia(p);
+    },
+    [db],
+  );
+
   const cambiarMonedaBase = useCallback(
     (m: Moneda) => {
       setMonedaBase(m);
@@ -139,6 +160,8 @@ export function TasasProvider({ children }: { children: ReactNode }) {
         monedaBase,
         cambiarMonedaBase,
         versionHistorial,
+        propia,
+        guardarPropia,
       }}
     >
       {children}

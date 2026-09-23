@@ -58,7 +58,10 @@ function etiquetaTasa(de: Moneda, a: Moneda): string {
 export default function PantallaTasas() {
   const tema = useTheme();
   const db = useSQLiteContext();
-  const { tasas, actualizando, error, actualizar, guardarManual, versionHistorial } = useTasas();
+  const { tasas, actualizando, error, actualizar, guardarManual, versionHistorial, propia, guardarPropia } = useTasas();
+  const [editandoPropia, setEditandoPropia] = useState(false);
+  const [propiaNombre, setPropiaNombre] = useState('');
+  const [propiaTasa, setPropiaTasa] = useState('');
   const [rango, setRango] = useState(30);
   const [historial, setHistorial] = useState<Record<Par, Historial> | null>(null);
 
@@ -196,6 +199,30 @@ export default function PantallaTasas() {
             {`Brecha: el USDT está ${brecha(bcv, paralelo).toFixed(1).replace('.', ',')}% sobre el BCV.`}
           </Text>
         )}
+        <Card
+          mode="contained"
+          onPress={() => {
+            setPropiaNombre(propia?.nombre ?? '');
+            setPropiaTasa(propia ? tasaATexto(propia.tasa) : '');
+            setEditandoPropia(true);
+          }}
+        >
+          <Card.Content style={styles.tasa}>
+            <View style={styles.flex}>
+              <Text variant="labelLarge">{propia ? `${propia.nombre} (tu tasa)` : 'Tu propia tasa'}</Text>
+              {propia ? (
+                <Text variant="headlineMedium" style={styles.cifra}>
+                  {formatearTasa(propia.tasa)}
+                  <Text variant="bodyMedium">  Bs./USD</Text>
+                </Text>
+              ) : (
+                <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                  Toca para agregar la tasa de tu banco o casa de cambio: aparecerá como opción al cambiar divisas.
+                </Text>
+              )}
+            </View>
+          </Card.Content>
+        </Card>
         <Card mode="outlined">
           <Card.Title title="Historial" subtitle="Desliza el dedo sobre el gráfico para ver cada día" />
           <Card.Content style={styles.historial}>
@@ -238,6 +265,35 @@ export default function PantallaTasas() {
           <Dialog.Actions>
             <Button onPress={() => setEditando(null)}>Cancelar</Button>
             <Button onPress={guardar} disabled={!parsearTasa(tasaManual)}>
+              Guardar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+        <Dialog visible={editandoPropia} onDismiss={() => setEditandoPropia(false)}>
+          <Dialog.Title>Tu propia tasa</Dialog.Title>
+          <Dialog.Content style={styles.historial}>
+            <TextInput label="Nombre (p. ej. Banca Amiga)" value={propiaNombre} onChangeText={setPropiaNombre} mode="outlined" maxLength={20} />
+            <TextInput label="Bs. por dólar" value={propiaTasa} onChangeText={setPropiaTasa} keyboardType="decimal-pad" mode="outlined" />
+          </Dialog.Content>
+          <Dialog.Actions>
+            {propia && (
+              <Button
+                onPress={async () => {
+                  await guardarPropia(null);
+                  setEditandoPropia(false);
+                }}
+              >
+                Quitar
+              </Button>
+            )}
+            <Button onPress={() => setEditandoPropia(false)}>Cancelar</Button>
+            <Button
+              disabled={!propiaNombre.trim() || !parsearTasa(propiaTasa)}
+              onPress={async () => {
+                await guardarPropia({ nombre: propiaNombre.trim(), tasa: parsearTasa(propiaTasa)! });
+                setEditandoPropia(false);
+              }}
+            >
               Guardar
             </Button>
           </Dialog.Actions>
