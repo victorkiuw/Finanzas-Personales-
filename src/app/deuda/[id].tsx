@@ -2,7 +2,7 @@ import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Button, Card, IconButton, Menu, Text, useTheme } from 'react-native-paper';
+import { Button, Card, Text, useTheme } from 'react-native-paper';
 
 import { DialogoPagoDeuda } from '../../components/DialogoPagoDeuda';
 import { ListaMovimientos } from '../../components/ListaMovimientos';
@@ -19,7 +19,6 @@ export default function DetalleDeuda() {
   const { tasas, referencia } = useTasas();
   const [deuda, setDeuda] = useState<Deuda | null>(null);
   const [pagando, setPagando] = useState(false);
-  const [menu, setMenu] = useState(false);
   // Fuerza a la lista a recargar tras un pago (la pantalla no pierde el foco).
   const [version, setVersion] = useState(0);
 
@@ -33,13 +32,11 @@ export default function DetalleDeuda() {
 
   const alternarCerrada = async () => {
     if (!deuda) return;
-    setMenu(false);
     await establecerDeudaCerrada(db, deuda.id, !deuda.cerrada);
     cargar();
   };
 
   const confirmarEliminar = () => {
-    setMenu(false);
     Alert.alert(
       '¿Eliminar deuda?',
       'Se borrarán también el préstamo y los pagos registrados, y los saldos de tus billeteras se recalcularán.',
@@ -64,28 +61,6 @@ export default function DetalleDeuda() {
       <Stack.Screen
         options={{
           title: deuda ? (meDeben ? `${deuda.persona} me debe` : `Le debo a ${deuda.persona}`) : '',
-          headerRight: () => (
-            <Menu
-              visible={menu}
-              onDismiss={() => setMenu(false)}
-              anchor={<IconButton icon="dots-vertical" accessibilityLabel="Opciones" onPress={() => setMenu(true)} />}
-            >
-              <Menu.Item
-                leadingIcon="pencil"
-                title="Editar"
-                onPress={() => {
-                  setMenu(false);
-                  router.push(`/deuda/editar/${deudaId}`);
-                }}
-              />
-              <Menu.Item
-                leadingIcon={deuda?.cerrada ? 'lock-open-variant' : 'check-circle'}
-                title={deuda?.cerrada ? 'Reabrir' : 'Marcar como saldada'}
-                onPress={alternarCerrada}
-              />
-              <Menu.Item leadingIcon="delete" title="Eliminar" onPress={confirmarEliminar} />
-            </Menu>
-          ),
         }}
       />
       <ListaMovimientos
@@ -109,6 +84,18 @@ export default function DetalleDeuda() {
                       ✓ Saldada
                     </Text>
                   )}
+                  {/* Acciones a la vista, sin menú escondido. */}
+                  <View style={styles.acciones}>
+                    <Button compact mode="contained-tonal" icon="pencil" onPress={() => router.push(`/deuda/editar/${deudaId}`)}>
+                      Editar
+                    </Button>
+                    <Button compact mode="outlined" icon={deuda.cerrada ? 'lock-open-variant' : 'check-circle'} onPress={alternarCerrada}>
+                      {deuda.cerrada ? 'Reabrir' : 'Saldada'}
+                    </Button>
+                    <Button compact mode="text" icon="delete" textColor={tema.colors.error} onPress={confirmarEliminar}>
+                      Eliminar
+                    </Button>
+                  </View>
                 </Card.Content>
               </Card>
               {!deuda.cerrada && (
@@ -140,5 +127,6 @@ export default function DetalleDeuda() {
 const styles = StyleSheet.create({
   tarjeta: { margin: 16, marginBottom: 8 },
   contenido: { gap: 8 },
+  acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   boton: { marginHorizontal: 16, marginBottom: 8 },
 });

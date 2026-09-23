@@ -1,5 +1,6 @@
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { Card, ProgressBar, Text, useTheme } from 'react-native-paper';
+import { Card, IconButton, ProgressBar, Text, useTheme } from 'react-native-paper';
 
 import type { Deuda } from '../db/deudas';
 import { cambioDe, type Tasas } from '../db/tasas';
@@ -112,6 +113,14 @@ export function TarjetaDeuda({ deuda, tasas, referencia, onPress }: Omit<Props, 
               : undefined
         }
         subtitleStyle={vencida(deuda) ? { color: tema.colors.error } : undefined}
+        right={(p) => (
+          <IconButton
+            {...p}
+            icon="pencil"
+            accessibilityLabel={`Editar la deuda de ${deuda.persona}`}
+            onPress={() => router.push(`/deuda/editar/${deuda.id}`)}
+          />
+        )}
       />
       <Card.Content>
         <ResumenDeuda deuda={deuda} tasas={tasas} referencia={referencia} />

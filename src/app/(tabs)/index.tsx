@@ -121,6 +121,8 @@ export default function PantallaInicio() {
   useFocusEffect(
     useCallback(() => {
       cargar().catch((e) => Alert.alert('Error', String(e)));
+      // Al salir de Inicio, los saldos guardados aparte se vuelven a ocultar.
+      return () => setVisibles(new Set());
     }, [cargar]),
   );
 
@@ -188,17 +190,33 @@ export default function PantallaInicio() {
             return (
               <Pressable
                 key={b.id}
-                // Una billetera guardada aparte primero se destapa; el segundo toque la abre.
-                onPress={() => (oculta ? setVisibles((v) => new Set(v).add(b.id)) : router.push(`/billetera/${b.id}`))}
+                onPress={() => router.push(`/billetera/${b.id}`)}
                 style={[styles.miniTarjeta, { backgroundColor: tema.colors.surfaceVariant }]}
                 accessibilityRole="button"
-                accessibilityLabel={oculta ? `${b.nombre}, saldo oculto. Toca para verlo` : `${b.nombre}, ${formatearMonto(b.saldo, b.moneda)}`}
+                accessibilityLabel={oculta ? `${b.nombre}, saldo oculto` : `${b.nombre}, ${formatearMonto(b.saldo, b.moneda)}`}
               >
                 <View style={styles.filaMini}>
                   <Avatar.Icon size={24} icon={b.icono} color="#FFFFFF" style={{ backgroundColor: b.color_hex }} />
                   <Text variant="labelLarge" numberOfLines={1} style={styles.flex}>
                     {b.nombre}
                   </Text>
+                  {!b.en_total && (
+                    // El ojo muestra u oculta el saldo; tocar el resto de la tarjeta abre la billetera.
+                    <IconButton
+                      icon={oculta ? 'eye-outline' : 'eye-off-outline'}
+                      size={18}
+                      style={styles.ojo}
+                      accessibilityLabel={oculta ? 'Ver saldo' : 'Ocultar saldo'}
+                      onPress={() =>
+                        setVisibles((v) => {
+                          const nuevo = new Set(v);
+                          if (nuevo.has(b.id)) nuevo.delete(b.id);
+                          else nuevo.add(b.id);
+                          return nuevo;
+                        })
+                      }
+                    />
+                  )}
                 </View>
                 <Text
                   variant="titleMedium"
@@ -377,6 +395,7 @@ const styles = StyleSheet.create({
   carrusel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
   miniTarjeta: { flexGrow: 1, flexBasis: '45%', borderRadius: 12, padding: 12, gap: 6 },
   filaMini: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ojo: { margin: -8 },
   nuevaBilletera: { borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center' },
   cifra: { fontVariant: ['tabular-nums'] },
   negrita: { fontWeight: '700' },
