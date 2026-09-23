@@ -6,7 +6,7 @@ import { Button, Dialog, HelperText, Portal, Text, TextInput } from 'react-nativ
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import { moverFondosMeta, type Meta } from '../db/metas';
 import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { calcularTasa, enviadoConTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
@@ -72,19 +72,27 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
   const cambiarMonto = (t: string) => {
     setMontoTexto(t);
     const m = parsearMonto(t);
-    const escrita = parsearTasa(tasaTexto);
+    const escrita = parsearTasa(tasaTexto) ?? tasaPorDefecto;
     if (conCambio && m && m > 0 && escrita) setEquivalenteTexto(centimosATexto(recibidoConTasa(de, a, m, escrita)));
     else if (!escrita) setEquivalenteTexto('');
   };
   const cambiarTasa = (t: string) => {
     setTasaTexto(t);
-    const tasa = parsearTasa(t);
-    if (monto && monto > 0 && tasa) setEquivalenteTexto(centimosATexto(recibidoConTasa(de, a, monto, tasa)));
+    const nueva = parsearTasa(t);
+    if (!nueva) return;
+    const e = parsearMonto(equivalenteTexto);
+    if (monto && monto > 0) setEquivalenteTexto(centimosATexto(recibidoConTasa(de, a, monto, nueva)));
+    else if (e && e > 0) setMontoTexto(centimosATexto(enviadoConTasa(de, a, e, nueva)));
   };
+  // Funciona en los dos sentidos: con una tasa, escribir un monto calcula el otro;
+  // sin tasa, escribir los dos montos calcula la tasa.
   const cambiarEquivalente = (t: string) => {
     setEquivalenteTexto(t);
     const e = parsearMonto(t);
-    if (monto && monto > 0 && e && e > 0) setTasaTexto(tasaATexto(calcularTasa(de, a, monto, e)));
+    if (!e || e <= 0) return;
+    const tasaActual = parsearTasa(tasaTexto) ?? tasaPorDefecto;
+    if (tasaActual) setMontoTexto(centimosATexto(enviadoConTasa(de, a, e, tasaActual)));
+    else if (monto && monto > 0) setTasaTexto(tasaATexto(calcularTasa(de, a, monto, e)));
   };
 
   const guardar = async () => {

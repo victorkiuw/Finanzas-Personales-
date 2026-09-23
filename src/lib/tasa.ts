@@ -26,6 +26,12 @@ export function recibidoConTasa(origen: Moneda, destino: Moneda, enviado: number
   return Math.round(enviado * tasa);
 }
 
+/** Lo contrario: cuánto hay que enviar (céntimos) para recibir `recibido` con esa tasa. */
+export function enviadoConTasa(origen: Moneda, destino: Moneda, recibido: number, tasa: number): number {
+  if (porUnidadDeDestino(origen, destino)) return Math.round(recibido * tasa);
+  return Math.round(recibido / tasa);
+}
+
 export function formatearTasa(tasa: number): string {
   const decimales = tasa >= 100 ? 2 : 4;
   const [entero, frac] = tasa.toFixed(decimales).split('.');

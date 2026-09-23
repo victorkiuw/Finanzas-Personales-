@@ -6,7 +6,7 @@ import { Button, Chip, Dialog, HelperText, Portal, Text, TextInput } from 'react
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import { registrarPagoDeuda, type Deuda } from '../db/deudas';
 import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { calcularTasa, enviadoConTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
@@ -71,19 +71,27 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
   const cambiarMonto = (t: string) => {
     setMontoTexto(t);
     const m = parsearMonto(t);
-    const escrita = parsearTasa(tasaTexto);
+    const escrita = parsearTasa(tasaTexto) ?? tasaPorDefecto;
     if (conCambio && m && m > 0 && escrita) setEquivalenteTexto(centimosATexto(recibidoConTasa(de, a, m, escrita)));
     else if (!escrita) setEquivalenteTexto('');
   };
   const cambiarTasa = (t: string) => {
     setTasaTexto(t);
     const nueva = parsearTasa(t);
-    if (monto && monto > 0 && nueva) setEquivalenteTexto(centimosATexto(recibidoConTasa(de, a, monto, nueva)));
+    if (!nueva) return;
+    const e = parsearMonto(equivalenteTexto);
+    if (monto && monto > 0) setEquivalenteTexto(centimosATexto(recibidoConTasa(de, a, monto, nueva)));
+    else if (e && e > 0) setMontoTexto(centimosATexto(enviadoConTasa(de, a, e, nueva)));
   };
+  // Funciona en los dos sentidos: con una tasa, escribir un monto calcula el otro;
+  // sin tasa, escribir los dos montos calcula la tasa.
   const cambiarEquivalente = (t: string) => {
     setEquivalenteTexto(t);
     const e = parsearMonto(t);
-    if (monto && monto > 0 && e && e > 0) setTasaTexto(tasaATexto(calcularTasa(de, a, monto, e)));
+    if (!e || e <= 0) return;
+    const tasaActual = parsearTasa(tasaTexto) ?? tasaPorDefecto;
+    if (tasaActual) setMontoTexto(centimosATexto(enviadoConTasa(de, a, e, tasaActual)));
+    else if (monto && monto > 0) setTasaTexto(tasaATexto(calcularTasa(de, a, monto, e)));
   };
 
   /** Llena el monto con todo lo pendiente, convertido a la moneda de la billetera con la tasa actual. */
@@ -97,7 +105,7 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
       return;
     }
     // Inverso de recibidoConTasa: cuánto hay que mover en la billetera para cubrir lo pendiente.
-    const necesario = recibidoConTasa(a, de, deuda.pendiente, tasa);
+    const necesario = enviadoConTasa(de, a, deuda.pendiente, tasa);
     setMontoTexto(centimosATexto(necesario));
     setEquivalenteTexto(centimosATexto(deuda.pendiente));
     setError(null);

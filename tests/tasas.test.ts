@@ -192,3 +192,15 @@ test('calculadora: cada moneda con su propia tasa', async () => {
   assert.equal(convertirNatural(10000, 'EUR', 'USDT', t), 11475);
   assert.equal(convertirNatural(10000, 'EUR', 'BS', { ...t, euro: null }), null);
 });
+
+test('enviadoConTasa es lo contrario de recibidoConTasa', async () => {
+  const { enviadoConTasa } = await import('../src/lib/tasa');
+  // Bs. → $ a 852,42: para recibir $16,77 hay que enviar Bs. 14.295,08.
+  assert.equal(enviadoConTasa('BS', 'USD', 1677, 852.42), 1429508);
+  assert.equal(recibidoConTasa('BS', 'USD', 1429508, 852.42), 1677);
+  // $ → Bs.: para recibir Bs. 8.524,20 hay que enviar $10.
+  assert.equal(enviadoConTasa('USD', 'BS', 852420, 852.42), 1000);
+  // USD → USDT a 0,995: para recibir 99,50 USDT se envían $100.
+  assert.equal(enviadoConTasa('USD', 'USDT', 9950, 0.995), 10000);
+  assert.equal(enviadoConTasa('EUR', 'USD', 11500, 1.15), 10000);
+});

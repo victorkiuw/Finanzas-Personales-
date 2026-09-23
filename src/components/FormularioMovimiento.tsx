@@ -29,7 +29,7 @@ import {
 } from '../db/movimientos';
 import { formatearFechaCorta, formatearHora } from '../lib/fechas';
 import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { calcularTasa, enviadoConTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import {
   calcularComision,
   comisionPara,
@@ -158,7 +158,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
     setMontoTexto(t);
     // Si hay una tasa escrita, manda ella: se recalcula lo recibido.
     const nuevo = parsearMonto(t);
-    const escrita = parsearTasa(tasaTexto);
+    const escrita = parsearTasa(tasaTexto) ?? tasaPorDefecto;
     if (conCambio && nuevo && nuevo > 0 && escrita) {
       setRecibidoTexto(centimosATexto(recibidoConTasa(origen.moneda, destino.moneda, nuevo, escrita)));
     } else if (!escrita) {
@@ -169,17 +169,21 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
   const cambiarTasa = (t: string) => {
     setTasaTexto(t);
     const nueva = parsearTasa(t);
-    if (origen && destino && monto && monto > 0 && nueva) {
-      setRecibidoTexto(centimosATexto(recibidoConTasa(origen.moneda, destino.moneda, monto, nueva)));
-    }
+    if (!origen || !destino || !nueva) return;
+    const r = parsearMonto(recibidoTexto);
+    if (monto && monto > 0) setRecibidoTexto(centimosATexto(recibidoConTasa(origen.moneda, destino.moneda, monto, nueva)));
+    else if (r && r > 0) setMontoTexto(centimosATexto(enviadoConTasa(origen.moneda, destino.moneda, r, nueva)));
   };
 
+  // Funciona en los dos sentidos: con una tasa, escribir lo recibido calcula lo enviado;
+  // sin tasa, escribir los dos montos calcula la tasa.
   const cambiarRecibido = (t: string) => {
     setRecibidoTexto(t);
     const r = parsearMonto(t);
-    if (origen && destino && monto && monto > 0 && r && r > 0) {
-      setTasaTexto(tasaATexto(calcularTasa(origen.moneda, destino.moneda, monto, r)));
-    }
+    if (!origen || !destino || !r || r <= 0) return;
+    const tasaActual = parsearTasa(tasaTexto) ?? tasaPorDefecto;
+    if (tasaActual) setMontoTexto(centimosATexto(enviadoConTasa(origen.moneda, destino.moneda, r, tasaActual)));
+    else if (monto && monto > 0) setTasaTexto(tasaATexto(calcularTasa(origen.moneda, destino.moneda, monto, r)));
   };
 
   // Con otro par de monedas, la tasa y lo recibido que se habían escrito ya no aplican.
