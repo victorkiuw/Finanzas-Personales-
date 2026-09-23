@@ -70,6 +70,7 @@ export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: 
     esTransferencia ? 'Transferencia' : m.origen_nombre,
     formatearHora(m.fecha),
     m.nota,
+    m.comprobante ? '📎' : null,
   ]
     .filter(Boolean)
     .join(' · ');

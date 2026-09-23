@@ -19,13 +19,21 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "allowBackup": true
     },
     "plugins": [
       "expo-router",
       "expo-sqlite",
       "expo-notifications",
       "expo-local-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "La app usa tus fotos para adjuntar el comprobante de un pago.",
+          "cameraPermission": "La app usa la cámara para fotografiar el comprobante de un pago."
+        }
+      ],
       [
         "react-native-android-widget",
         {

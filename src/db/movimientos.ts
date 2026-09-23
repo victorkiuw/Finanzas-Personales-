@@ -39,6 +39,8 @@ export interface DatosMovimiento {
    * Al editar: undefined la deja como está, 0/null la quita.
    */
   comision?: number | null;
+  /** Ruta local de la foto del comprobante (undefined la deja como está al editar). */
+  comprobante?: string | null;
 }
 
 export interface Movimiento {
@@ -223,6 +225,7 @@ export async function crearMovimiento(db: BaseDatos, datos: DatosMovimiento): Pr
       valores,
     );
     if (comision) await sincronizarComision(db, r.lastInsertRowId, datos, comision);
+    if (datos.comprobante) await db.runAsync(`UPDATE transacciones SET comprobante = ? WHERE id = ?`, [datos.comprobante, r.lastInsertRowId]);
     return r.lastInsertRowId;
   });
 }
@@ -247,6 +250,9 @@ export async function actualizarMovimiento(db: BaseDatos, id: number, datos: Dat
     );
     // Si no se indica la comisión, la vinculada sigue igual pero acompaña la billetera y fecha del movimiento.
     await sincronizarComision(db, id, datos, comision === undefined ? actual.comision : comision);
+    if (datos.comprobante !== undefined) {
+      await db.runAsync(`UPDATE transacciones SET comprobante = ? WHERE id = ?`, [datos.comprobante, id]);
+    }
   });
 }
 

@@ -2,13 +2,15 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
   Chip,
   HelperText,
   IconButton,
+  Modal,
+  Portal,
   SegmentedButtons,
   Switch,
   Text,
@@ -30,6 +32,7 @@ import {
   type Movimiento,
   type TipoMovimiento,
 } from '../db/movimientos';
+import { elegirComprobante } from '../lib/comprobantes';
 import { formatearFechaCorta, formatearHora } from '../lib/fechas';
 import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
 import { calcularTasa, enviadoConTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
@@ -101,6 +104,9 @@ export function FormularioMovimiento({
   const [comisionTexto, setComisionTexto] = useState('');
   // Dividir el gasto con otras personas (lo de ellas queda como préstamo).
   const [dividir, setDividir] = useState(false);
+  // Foto del comprobante (ruta local) y si se está viendo en grande.
+  const [comprobante, setComprobante] = useState<string | null>(null);
+  const [verComprobante, setVerComprobante] = useState(false);
   const [partes, setPartes] = useState<{ persona: string; montoTexto: string }[]>([{ persona: '', montoTexto: '' }]);
   const { tasas, referencia } = useTasas();
   // Pago Móvil desde bolívares: a persona o a comercio (null = según la billetera); 'OTRA' = monto a mano.
@@ -152,6 +158,7 @@ export function FormularioMovimiento({
       if (m.tasa_cambio !== null) setTasaTexto(tasaATexto(m.tasa_cambio));
       setFecha(new Date(m.fecha));
       setNota(m.nota ?? '');
+      setComprobante(m.comprobante);
       setUsarComision(m.comision !== null);
       if (m.comision !== null) {
         setComisionTexto(centimosATexto(m.comision));
@@ -288,6 +295,15 @@ export function FormularioMovimiento({
     }
   };
 
+  const adjuntar = async (origen: 'camara' | 'galeria') => {
+    try {
+      const uri = await elegirComprobante(origen);
+      if (uri) setComprobante(uri);
+    } catch (e) {
+      Alert.alert('Comprobante', e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const guardar = async () => {
     if (!monto || monto <= 0) {
       setError('Escribe un monto mayor que cero.');
@@ -318,6 +334,7 @@ export function FormularioMovimiento({
       nota,
       // Una comisión (hija de otro movimiento) no lleva comisión propia.
       comision: original?.comision_de != null ? undefined : comision || 0,
+      comprobante,
     };
     try {
       if (id === undefined && dividiendo) {
@@ -692,6 +709,34 @@ export function FormularioMovimiento({
           </Button>
         </View>
 
+        <View style={styles.bloque}>
+          <Text variant="labelLarge">Comprobante (opcional)</Text>
+          {comprobante ? (
+            <View style={styles.filaCampos}>
+              <Pressable onPress={() => setVerComprobante(true)} accessibilityRole="imagebutton" accessibilityLabel="Ver comprobante">
+                <Image source={{ uri: comprobante }} style={styles.miniatura} />
+              </Pressable>
+              <Button icon="close" onPress={() => setComprobante(null)}>
+                Quitar
+              </Button>
+            </View>
+          ) : (
+            <View style={styles.filaCampos}>
+              <Button mode="outlined" icon="camera" onPress={() => adjuntar('camara')}>
+                Foto
+              </Button>
+              <Button mode="outlined" icon="image" onPress={() => adjuntar('galeria')}>
+                Galería
+              </Button>
+            </View>
+          )}
+        </View>
+        <Portal>
+          <Modal visible={verComprobante} onDismiss={() => setVerComprobante(false)} contentContainerStyle={styles.modal}>
+            {comprobante && <Image source={{ uri: comprobante }} style={styles.imagenGrande} resizeMode="contain" />}
+          </Modal>
+        </Portal>
+
         <TextInput
           label="Nota (opcional)"
           value={nota}
@@ -728,6 +773,9 @@ const styles = StyleSheet.create({
   monto: { fontSize: 24 },
   bloque: { gap: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  miniatura: { width: 72, height: 72, borderRadius: 8 },
+  modal: { margin: 16, backgroundColor: '#000', borderRadius: 12, overflow: 'hidden' },
+  imagenGrande: { width: '100%', height: 520 },
   filaCampos: { flexDirection: 'row', gap: 8 },
   textoElegido: { color: '#FFFFFF' },
   filaSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12 },
