@@ -56,6 +56,9 @@ export interface DatosDeuda {
 
 export const LARGO_MAXIMO_PERSONA = 40;
 
+/** Tolerancia al pagar de más por redondeo de la tasa (1 %). */
+const TOLERANCIA = 0.01;
+
 export function unidadDeuda(moneda: Moneda, tasaReferencia: number | null): Moneda {
   return tasaReferencia ? 'USD' : moneda;
 }
@@ -124,7 +127,11 @@ function validarTexto(persona: string, fecha: string, fechaLimite: string | null
   return p;
 }
 
-export async function crearDeuda(db: BaseDatos, d: DatosDeuda): Promise<number> {
+async function validarDeuda(
+  db: BaseDatos,
+  d: DatosDeuda,
+  billeteraPermitida: number | null = null,
+): Promise<{ persona: string; tasa: number | null; total: number }> {
   const persona = validarTexto(d.persona, d.fecha, d.fecha_limite);
   if (d.tipo !== 'ME_DEBEN' && d.tipo !== 'DEBO') throw new ErrorValidacion('Tipo inválido.');
   if (!esMoneda(d.moneda)) throw new ErrorValidacion('Moneda inválida.');
@@ -134,46 +141,96 @@ export async function crearDeuda(db: BaseDatos, d: DatosDeuda): Promise<number> 
   const total = totalEnUnidad(d.monto, d.moneda, tasa);
   if (total <= 0) throw new ErrorValidacion('El monto es demasiado pequeño para esa tasa.');
 
-  let billetera: { moneda: Moneda; archivada: number } | null = null;
   if (d.billetera_id) {
-    billetera = await db.getFirstAsync(`SELECT moneda, archivada FROM billeteras WHERE id = ?`, [d.billetera_id]);
+    const billetera = await db.getFirstAsync<{ moneda: Moneda; archivada: number }>(
+      `SELECT moneda, archivada FROM billeteras WHERE id = ?`,
+      [d.billetera_id],
+    );
     if (!billetera) throw new ErrorValidacion('La billetera no existe.');
-    if (billetera.archivada) throw new ErrorValidacion('La billetera está archivada.');
+    // Al editar se acepta la billetera que ya tenía aunque luego se archivara.
+    if (billetera.archivada && d.billetera_id !== billeteraPermitida) throw new ErrorValidacion('La billetera está archivada.');
     if (billetera.moneda !== d.moneda) throw new ErrorValidacion('La billetera debe ser de la misma moneda que el préstamo.');
   }
+  return { persona, tasa, total };
+}
 
+/** Movimiento del préstamo en la billetera (el dinero sale si presté, entra si me prestaron). */
+async function insertarPrestamo(db: BaseDatos, id: number, d: DatosDeuda, total: number, tasa: number | null) {
+  if (!d.billetera_id) return;
+  await db.runAsync(
+    `INSERT INTO transacciones (tipo, monto, fecha, billetera_origen_id, deuda_id, monto_destino, tasa_cambio)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [d.tipo === 'ME_DEBEN' ? 'PRESTAMO_DADO' : 'PRESTAMO_RECIBIDO', d.monto, d.fecha, d.billetera_id, id, total, tasa],
+  );
+}
+
+export async function crearDeuda(db: BaseDatos, d: DatosDeuda): Promise<number> {
+  const { persona, tasa, total } = await validarDeuda(db, d);
   return enTransaccion(db, async () => {
     const r = await db.runAsync(
       `INSERT INTO deudas (tipo, persona, moneda, monto, tasa_referencia, fecha, fecha_limite, nota) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [d.tipo, persona, d.moneda, d.monto, tasa, d.fecha, d.fecha_limite ?? null, d.nota?.trim() || null],
     );
-    const id = r.lastInsertRowId;
-    if (d.billetera_id) {
-      await db.runAsync(
-        `INSERT INTO transacciones (tipo, monto, fecha, billetera_origen_id, deuda_id, monto_destino, tasa_cambio)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [d.tipo === 'ME_DEBEN' ? 'PRESTAMO_DADO' : 'PRESTAMO_RECIBIDO', d.monto, d.fecha, d.billetera_id, id, total, tasa],
-      );
-    }
-    return id;
+    await insertarPrestamo(db, r.lastInsertRowId, d, total, tasa);
+    return r.lastInsertRowId;
   });
 }
 
-/** Solo se editan los datos descriptivos; los montos quedan fijos para no descuadrar los pagos. */
-export async function actualizarDeuda(
-  db: BaseDatos,
-  id: number,
-  d: { persona: string; fecha_limite: string | null; nota: string | null },
-): Promise<void> {
+/** Billetera de la que salió (o a la que entró) el préstamo, si se registró con una. */
+export async function billeteraDeDeuda(db: BaseDatos, id: number): Promise<number | null> {
+  const f = await db.getFirstAsync<{ billetera_origen_id: number }>(
+    `SELECT billetera_origen_id FROM transacciones
+     WHERE deuda_id = ? AND tipo IN ('PRESTAMO_DADO', 'PRESTAMO_RECIBIDO') ORDER BY id LIMIT 1`,
+    [id],
+  );
+  return f?.billetera_origen_id ?? null;
+}
+
+/**
+ * Edita todo de la deuda. El movimiento del préstamo se rehace con los datos
+ * nuevos (o desaparece si se quita la billetera). Si ya hay pagos no se puede
+ * cambiar el tipo ni pasar entre bolívares y dólares, porque los pagos están
+ * contados en esa unidad; sí se pueden corregir el monto y la tasa.
+ */
+export async function actualizarDeuda(db: BaseDatos, id: number, d: DatosDeuda): Promise<void> {
   const actual = await obtenerDeuda(db, id);
   if (!actual) throw new ErrorValidacion('La deuda no existe.');
-  const persona = validarTexto(d.persona, actual.fecha, d.fecha_limite);
-  await db.runAsync(`UPDATE deudas SET persona = ?, fecha_limite = ?, nota = ? WHERE id = ?`, [
-    persona,
-    d.fecha_limite,
-    d.nota?.trim() || null,
-    id,
-  ]);
+  const { persona, tasa, total } = await validarDeuda(db, d, await billeteraDeDeuda(db, id));
+
+  const pagos = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM transacciones WHERE deuda_id = ? AND tipo IN ('COBRO_DEUDA', 'PAGO_DEUDA')`,
+    [id],
+  );
+  const tienePagos = (pagos?.n ?? 0) > 0;
+  if (tienePagos) {
+    if (d.tipo !== actual.tipo) {
+      throw new ErrorValidacion('Ya tiene pagos: para cambiar si prestaste o te prestaron, borra antes los pagos.');
+    }
+    if ((unidadDeuda(d.moneda, tasa) === 'BS') !== (actual.unidad === 'BS')) {
+      throw new ErrorValidacion(
+        `Ya tiene pagos contados en ${actual.unidad === 'BS' ? 'bolívares' : 'dólares'}: para cambiarlo, borra antes los pagos.`,
+      );
+    }
+    if (actual.pagado > Math.ceil(total * (1 + TOLERANCIA))) {
+      throw new ErrorValidacion('Lo ya pagado supera el nuevo monto.');
+    }
+  }
+
+  // Se cierra sola si con el nuevo monto queda saldada, y se reabre si se había cerrado por pagos y ahora falta.
+  let cerrada = actual.cerrada;
+  if (tienePagos && actual.pagado >= total) cerrada = true;
+  else if (actual.cerrada && actual.pendiente === 0 && actual.pagado > 0) cerrada = false;
+
+  await enTransaccion(db, async () => {
+    await db.runAsync(
+      `UPDATE deudas SET tipo = ?, persona = ?, moneda = ?, monto = ?, tasa_referencia = ?, fecha = ?,
+         fecha_limite = ?, nota = ?, cerrada = ?
+       WHERE id = ?`,
+      [d.tipo, persona, d.moneda, d.monto, tasa, d.fecha, d.fecha_limite ?? null, d.nota?.trim() || null, cerrada ? 1 : 0, id],
+    );
+    await db.runAsync(`DELETE FROM transacciones WHERE deuda_id = ? AND tipo IN ('PRESTAMO_DADO', 'PRESTAMO_RECIBIDO')`, [id]);
+    await insertarPrestamo(db, id, d, total, tasa);
+  });
 }
 
 export async function establecerDeudaCerrada(db: BaseDatos, id: number, cerrada: boolean): Promise<void> {
@@ -195,9 +252,6 @@ export interface DatosPagoDeuda {
   fecha: string;
   nota?: string | null;
 }
-
-/** Tolerancia al pagar de más por redondeo de la tasa (1 %). */
-const TOLERANCIA = 0.01;
 
 /**
  * Registra un pago: si me deben, el dinero entra a la billetera (cobro); si

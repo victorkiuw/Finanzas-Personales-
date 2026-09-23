@@ -16,10 +16,18 @@ import {
 } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
-import { actualizarDeuda, crearDeuda, LARGO_MAXIMO_PERSONA, obtenerDeuda, totalEnUnidad, type TipoDeuda } from '../db/deudas';
+import {
+  actualizarDeuda,
+  billeteraDeDeuda,
+  crearDeuda,
+  LARGO_MAXIMO_PERSONA,
+  obtenerDeuda,
+  totalEnUnidad,
+  type TipoDeuda,
+} from '../db/deudas';
 import { fechaSimpleLegible, formatearFechaCorta } from '../lib/fechas';
-import { formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../lib/moneda';
-import { parsearTasa } from '../lib/tasa';
+import { centimosATexto, formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../lib/moneda';
+import { parsearTasa, tasaATexto } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
@@ -28,8 +36,8 @@ function aClaveFecha(d: Date): string {
 }
 
 /**
- * Nueva deuda/préstamo. Al editar solo se cambian persona, fecha límite y nota:
- * los montos quedan fijos para no descuadrar los pagos ya registrados.
+ * Nueva deuda/préstamo o edición completa de una existente (el movimiento del
+ * préstamo en la billetera se ajusta solo).
  */
 export function FormularioDeuda({ id }: { id?: number }) {
   const db = useSQLiteContext();
@@ -49,6 +57,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
   const [billeteraId, setBilleteraId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [tienePagos, setTienePagos] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -62,9 +71,11 @@ export function FormularioDeuda({ id }: { id?: number }) {
         setTipo(d.tipo);
         setPersona(d.persona);
         setMoneda(d.moneda);
-        setMontoTexto(String(d.monto / 100).replace('.', ','));
+        setMontoTexto(centimosATexto(d.monto));
         setIndexada(d.tasa_referencia !== null);
-        setTasaTexto(d.tasa_referencia ? String(d.tasa_referencia).replace('.', ',') : '');
+        setTasaTexto(d.tasa_referencia ? tasaATexto(d.tasa_referencia) : '');
+        setBilleteraId(await billeteraDeDeuda(db, id));
+        setTienePagos(d.pagado > 0);
         setFecha(new Date(d.fecha));
         setFechaLimite(d.fecha_limite);
         setNota(d.nota ?? '');
@@ -106,18 +117,6 @@ export function FormularioDeuda({ id }: { id?: number }) {
 
   const guardar = async () => {
     setError(null);
-    if (editando) {
-      setGuardando(true);
-      try {
-        await actualizarDeuda(db, id, { persona, fecha_limite: fechaLimite, nota });
-        router.back();
-      } catch (e) {
-        setError(e instanceof ErrorValidacion ? e.message : String(e));
-      } finally {
-        setGuardando(false);
-      }
-      return;
-    }
     if (!monto || monto <= 0) {
       setError('Escribe el monto.');
       return;
@@ -128,7 +127,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
     }
     setGuardando(true);
     try {
-      const nuevo = await crearDeuda(db, {
+      const datos = {
         tipo,
         persona,
         moneda,
@@ -138,8 +137,14 @@ export function FormularioDeuda({ id }: { id?: number }) {
         fecha_limite: fechaLimite,
         nota,
         billetera_id: billeteraId,
-      });
-      router.replace(`/deuda/${nuevo}`);
+      };
+      if (editando) {
+        await actualizarDeuda(db, id, datos);
+        router.back();
+      } else {
+        const nuevo = await crearDeuda(db, datos);
+        router.replace(`/deuda/${nuevo}`);
+      }
     } catch (e) {
       setError(e instanceof ErrorValidacion ? e.message : String(e));
     } finally {
@@ -159,10 +164,16 @@ export function FormularioDeuda({ id }: { id?: number }) {
           value={tipo}
           onValueChange={(v) => setTipo(v as TipoDeuda)}
           buttons={[
-            { value: 'ME_DEBEN', label: 'Presté (me deben)', disabled: editando },
-            { value: 'DEBO', label: 'Me prestaron', disabled: editando },
+            { value: 'ME_DEBEN', label: 'Presté (me deben)', disabled: tienePagos },
+            { value: 'DEBO', label: 'Me prestaron', disabled: tienePagos },
           ]}
         />
+        {tienePagos && (
+          <HelperText type="info">
+            Ya tiene pagos: puedes corregir el monto y la tasa, pero para cambiar el tipo o pasar entre bolívares y
+            dólares borra antes los pagos.
+          </HelperText>
+        )}
 
         <TextInput
           label={meDeben ? '¿A quién le prestaste?' : '¿Quién te prestó?'}
@@ -173,87 +184,83 @@ export function FormularioDeuda({ id }: { id?: number }) {
           autoFocus={!editando}
         />
 
-        {!editando && (
-          <>
-            <SegmentedButtons
-              value={moneda}
-              onValueChange={(v) => cambiarMoneda(v as Moneda)}
-              buttons={MONEDAS.map((m) => ({ value: m, label: INFO_MONEDA[m].corto }))}
-            />
-            <View>
-              <TextInput
-                label="Monto"
-                value={montoTexto}
-                onChangeText={setMontoTexto}
-                keyboardType="decimal-pad"
-                mode="outlined"
-                right={<TextInput.Affix text={INFO_MONEDA[moneda].corto} />}
-              />
-              {monto === null && montoTexto.trim() !== '' && <HelperText type="error">Número no válido</HelperText>}
-            </View>
+        <SegmentedButtons
+          value={moneda}
+          onValueChange={(v) => cambiarMoneda(v as Moneda)}
+          buttons={MONEDAS.map((m) => ({ value: m, label: INFO_MONEDA[m].corto }))}
+        />
+        <View>
+          <TextInput
+            label="Monto"
+            value={montoTexto}
+            onChangeText={setMontoTexto}
+            keyboardType="decimal-pad"
+            mode="outlined"
+            right={<TextInput.Affix text={INFO_MONEDA[moneda].corto} />}
+          />
+          {monto === null && montoTexto.trim() !== '' && <HelperText type="error">Número no válido</HelperText>}
+        </View>
 
-            {moneda === 'BS' && (
-              <View style={styles.bloque}>
-                <View style={styles.filaSwitch}>
-                  <View style={styles.flex}>
-                    <Text variant="labelLarge">Llevar la cuenta en dólares</Text>
-                    <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-                      Así, al pagarte, sabrás cuántos bolívares son a la tasa del día.
-                    </Text>
-                  </View>
-                  <Switch value={indexada} onValueChange={setIndexada} />
-                </View>
-                {indexada && (
-                  <>
-                    <TextInput
-                      label="Tasa a la que lo valoras (Bs. por USD)"
-                      value={tasaTexto}
-                      onChangeText={setTasaTexto}
-                      keyboardType="decimal-pad"
-                      mode="outlined"
-                    />
-                    <SugerenciasTasa
-                      de="BS"
-                      a="USD"
-                      billeteras={billeteras.filter((b) => b.id === billeteraId)}
-                      onElegir={setTasaTexto}
-                    />
-                    {enDolares !== null && (
-                      <HelperText type="info">{`${meDeben ? 'Te debe' : 'Debes'} ${formatearMonto(enDolares, 'USD')}`}</HelperText>
-                    )}
-                  </>
-                )}
-              </View>
-            )}
-
-            <View style={styles.bloque}>
-              <Text variant="labelLarge">{meDeben ? '¿De qué billetera salió el dinero?' : '¿A qué billetera entró?'}</Text>
-              {billeterasMoneda.length > 0 ? (
-                <>
-                  <SelectorBilletera billeteras={billeterasMoneda} valor={billeteraId} onCambio={setBilleteraId} />
-                  <Chip
-                    compact
-                    selected={billeteraId === null}
-                    showSelectedCheck={false}
-                    mode={billeteraId === null ? 'flat' : 'outlined'}
-                    onPress={() => setBilleteraId(null)}
-                    style={styles.chipNinguna}
-                  >
-                    Ninguna (no mover saldos)
-                  </Chip>
-                </>
-              ) : (
+        {moneda === 'BS' && (
+          <View style={styles.bloque}>
+            <View style={styles.filaSwitch}>
+              <View style={styles.flex}>
+                <Text variant="labelLarge">Llevar la cuenta en dólares</Text>
                 <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-                  {`No tienes billeteras en ${INFO_MONEDA[moneda].nombre}: se registra sin mover saldos.`}
+                  Así, al pagarte, sabrás cuántos bolívares son a la tasa del día.
                 </Text>
-              )}
+              </View>
+              <Switch value={indexada} onValueChange={setIndexada} />
             </View>
-
-            <Button mode="outlined" icon="calendar" onPress={() => elegirFecha('prestamo')}>
-              {`Fecha del préstamo: ${formatearFechaCorta(fecha)}`}
-            </Button>
-          </>
+            {indexada && (
+              <>
+                <TextInput
+                  label="Tasa a la que lo valoras (Bs. por USD)"
+                  value={tasaTexto}
+                  onChangeText={setTasaTexto}
+                  keyboardType="decimal-pad"
+                  mode="outlined"
+                />
+                <SugerenciasTasa
+                  de="BS"
+                  a="USD"
+                  billeteras={billeteras.filter((b) => b.id === billeteraId)}
+                  onElegir={setTasaTexto}
+                />
+                {enDolares !== null && (
+                  <HelperText type="info">{`${meDeben ? 'Te debe' : 'Debes'} ${formatearMonto(enDolares, 'USD')}`}</HelperText>
+                )}
+              </>
+            )}
+          </View>
         )}
+
+        <View style={styles.bloque}>
+          <Text variant="labelLarge">{meDeben ? '¿De qué billetera salió el dinero?' : '¿A qué billetera entró?'}</Text>
+          {billeterasMoneda.length > 0 ? (
+            <>
+              <SelectorBilletera billeteras={billeterasMoneda} valor={billeteraId} onCambio={setBilleteraId} />
+              <Chip
+                compact
+                selected={billeteraId === null}
+                showSelectedCheck={false}
+                mode={billeteraId === null ? 'flat' : 'outlined'}
+                onPress={() => setBilleteraId(null)}
+                style={styles.chipNinguna}
+              >
+                Ninguna (no mover saldos)
+              </Chip>
+            </>
+          ) : (
+            <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+              {`No tienes billeteras en ${INFO_MONEDA[moneda].nombre}: se registra sin mover saldos.`}
+            </Text>
+          )}
+        </View>
+
+        <Button mode="outlined" icon="calendar" onPress={() => elegirFecha('prestamo')}>
+          {`Fecha del préstamo: ${formatearFechaCorta(fecha)}`}
+        </Button>
 
         <View style={styles.filaSwitch}>
           <Button mode="outlined" icon="calendar-clock" onPress={() => elegirFecha('limite')} style={styles.flex}>
