@@ -76,11 +76,14 @@ const ALTURA_COLUMNAS = 140;
 export function ColumnasMensuales({
   meses,
   etiquetas,
+  titulos = etiquetas,
   moneda,
 }: {
   meses: TotalMes[];
-  /** Etiqueta corta de cada mes, p. ej. "sep". */
+  /** Etiqueta corta de cada periodo, p. ej. "sep" o "lun 22". */
   etiquetas: string[];
+  /** Nombre del periodo en el detalle, p. ej. "Semana del 15 sep". */
+  titulos?: string[];
   moneda: Moneda;
 }) {
   const tema = useTheme();
@@ -127,7 +130,7 @@ export function ColumnasMensuales({
 
       {actual && (
         <View style={styles.detalle}>
-          <Text variant="labelLarge">{etiquetas[elegido]}</Text>
+          <Text variant="labelLarge">{titulos[elegido]}</Text>
           <Text variant="bodyMedium" style={styles.cifra}>{`Ingresos ${formatearMonto(actual.ingresos, moneda)}`}</Text>
           <Text variant="bodyMedium" style={styles.cifra}>{`Gastos ${formatearMonto(actual.gastos, moneda)}`}</Text>
           <Text variant="bodyMedium" style={[styles.cifra, styles.negrita]}>

@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Chip } from 'react-native-paper';
 
 import type { Billetera } from '../db/billeteras';
@@ -14,7 +14,8 @@ interface Props {
 
 export function SelectorBilletera({ billeteras, valor, onCambio, excluir }: Props) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.fila}>
+    // Las billeteras se reparten en varias líneas: se ven todas sin deslizar, también en diálogos angostos.
+    <View style={styles.fila}>
       {billeteras
         .filter((b) => b.id !== excluir)
         .map((b) => {
@@ -23,6 +24,7 @@ export function SelectorBilletera({ billeteras, valor, onCambio, excluir }: Prop
             <Chip
               key={b.id}
               icon={b.icono}
+              compact
               selected={elegida}
               showSelectedCheck={false}
               mode={elegida ? 'flat' : 'outlined'}
@@ -35,11 +37,11 @@ export function SelectorBilletera({ billeteras, valor, onCambio, excluir }: Prop
             </Chip>
           );
         })}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fila: { gap: 8, paddingVertical: 2 },
+  fila: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 2 },
   textoElegido: { color: '#FFFFFF' },
 });

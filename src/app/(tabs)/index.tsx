@@ -2,7 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { CintaTasas } from '../../components/CintaTasas';
 import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
@@ -20,11 +20,11 @@ import { procesarRecurrentes, type Recurrente } from '../../db/recurrentes';
 import { listarMovimientos, type Movimiento } from '../../db/movimientos';
 import {
   Conversor,
+  disponibleAl,
   filasDeReporte,
-  patrimonioPorMes,
   resumirPeriodo,
   type PuntoPatrimonio,
-  totalesPorMes,
+  totalesPorPeriodo,
   type FilaReporte,
   type HistorialEuro,
 } from '../../db/reportes';
@@ -32,11 +32,20 @@ import { listarHistorial } from '../../db/tasas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
 import { claveDia, nombreMes, rangoMes } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
+import { periodos, type Escala } from '../../lib/periodos';
 import { DIAS_AVISO_EXPORTAR, diasSinExportar } from '../../lib/respaldoAuto';
 import { actualizarWidget } from '../../widget/manejador';
 
 const MESES_GRAFICO = 6;
-const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+/** Cuántas columnas y puntos de línea muestra cada escala. */
+const COLUMNAS: Record<Escala, number> = { dia: 7, semana: 6, mes: 6 };
+const PUNTOS_LINEA: Record<Escala, number> = { dia: 30, semana: 12, mes: 12 };
+const TEXTO_COLUMNAS: Record<Escala, string> = { dia: 'Últimos 7 días', semana: 'Últimas 6 semanas', mes: 'Últimos 6 meses' };
+const TEXTO_LINEA: Record<Escala, string> = {
+  dia: 'Al cierre de cada día (30 días)',
+  semana: 'Al cierre de cada semana (12 semanas)',
+  mes: 'Al cierre de cada mes (12 meses)',
+};
 
 function claveMes(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -69,6 +78,14 @@ export default function PantallaInicio() {
     return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   });
   const [datos, setDatos] = useState<Datos | null>(null);
+  // Escala de los gráficos: por día, por semana o por mes.
+  const [escala, setEscala] = useState<Escala>('mes');
+  // Los gráficos terminan hoy si se ve el mes actual; si no, el último día del mes elegido.
+  const fin = useMemo(() => {
+    const hoy = new Date();
+    const finMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0);
+    return finMes < hoy ? finMes : hoy;
+  }, [mes]);
 
   const cargar = useCallback(async () => {
     // Se leen los 6 meses del gráfico; el mes elegido es el último.
@@ -89,16 +106,17 @@ export default function PantallaInicio() {
         listarCategorias(db, 'GASTO', { incluirArchivadas: true }),
       ]);
     const historialEuro = { euro: historialEuroBcv, bcv: historialBcv };
-    // Disponible al cierre de los últimos 12 meses hasta el mes que se está viendo.
-    const meses12 = Array.from({ length: 12 }, (_, i) => claveMes(new Date(mes.getFullYear(), mes.getMonth() - 11 + i, 1)));
+    // Disponible al cierre de cada día (30), semana (12) o mes (12) hasta el periodo que se está viendo.
+    const cortes = periodos(escala, fin, PUNTOS_LINEA[escala]);
     const conversor = new Conversor(historial, cambio.dolar, historialEuro, cambio.euro);
-    const patrimonio = await patrimonioPorMes(db, meses12, conversor, monedaBase);
+    const puntos = await disponibleAl(db, cortes.map((p) => p.hasta), conversor, monedaBase);
+    const patrimonio = puntos.map((p, i) => ({ ...p, mes: cortes[i].larga }));
     const sinExportar = await diasSinExportar(db);
     // Mantiene al día el widget de la pantalla de inicio (si el usuario lo agregó).
     actualizarWidget(db).catch(() => {});
     setDatos({ billeteras, metas, recientes, filas, historial, historialEuro, presupuestos, categorias, pendientes, patrimonio, sinExportar });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
-  }, [db, mes, referencia, versionHistorial, monedaBase, cambio.dolar, cambio.euro]);
+  }, [db, mes, fin, escala, referencia, versionHistorial, monedaBase, cambio.dolar, cambio.euro]);
 
   useFocusEffect(
     useCallback(() => {
@@ -111,14 +129,15 @@ export default function PantallaInicio() {
     const conversor = new Conversor(datos.historial, cambio.dolar, datos.historialEuro, cambio.euro);
     const clave = claveMes(mes);
     const delMes = datos.filas.filter((f) => claveDia(f.fecha).startsWith(clave));
-    const meses = Array.from({ length: MESES_GRAFICO }, (_, i) => new Date(mes.getFullYear(), mes.getMonth() - (MESES_GRAFICO - 1) + i, 1));
+    const columnas = periodos(escala, fin, COLUMNAS[escala]);
     return {
       presupuestos: estadoPresupuestos(datos.presupuestos, datos.categorias, delMes, conversor),
       resumen: resumirPeriodo(delMes, conversor, monedaBase),
-      porMes: totalesPorMes(datos.filas, conversor, monedaBase, meses.map(claveMes)),
-      etiquetas: meses.map((d) => MESES_CORTOS[d.getMonth()]),
+      porMes: totalesPorPeriodo(datos.filas, conversor, monedaBase, columnas),
+      etiquetas: columnas.map((p) => p.corta),
+      titulos: columnas.map((p) => p.larga),
     };
-  }, [datos, mes, monedaBase, cambio.dolar, cambio.euro]);
+  }, [datos, mes, fin, escala, monedaBase, cambio.dolar, cambio.euro]);
 
   if (!datos || !reporte) return <ActivityIndicator style={styles.cargando} />;
 
@@ -139,7 +158,7 @@ export default function PantallaInicio() {
     );
   }
 
-  const { resumen, porMes, etiquetas, presupuestos } = reporte;
+  const { resumen, porMes, etiquetas, titulos, presupuestos } = reporte;
   const colores = coloresSeries(tema.dark);
   const esMesActual = claveMes(mes) === claveMes(new Date());
   const cambiarMes = (delta: number) => setMes(new Date(mes.getFullYear(), mes.getMonth() + delta, 1));
@@ -251,21 +270,43 @@ export default function PantallaInicio() {
             </Card.Content>
           </Card>
 
+          <SegmentedButtons
+            value={escala}
+            onValueChange={(v) => setEscala(v as Escala)}
+            buttons={[
+              { value: 'dia', label: 'Día' },
+              { value: 'semana', label: 'Semana' },
+              { value: 'mes', label: 'Mes' },
+            ]}
+          />
+
           <Card mode="outlined">
-            <Card.Title title="Ingresos vs. gastos" subtitle="Últimos 6 meses · toca un mes para ver sus cifras" />
+            <Card.Title
+              title="Ingresos vs. gastos"
+              subtitle={`${TEXTO_COLUMNAS[escala]} · toca una columna para ver sus cifras`}
+              subtitleNumberOfLines={2}
+            />
             <Card.Content>
-              <ColumnasMensuales key={claveMes(mes) + monedaBase} meses={porMes} etiquetas={etiquetas} moneda={monedaBase} />
+              <ColumnasMensuales
+                key={escala + claveMes(mes) + monedaBase}
+                meses={porMes}
+                etiquetas={etiquetas}
+                titulos={titulos}
+                moneda={monedaBase}
+              />
             </Card.Content>
           </Card>
 
           <Card mode="outlined">
-            <Card.Title title="Evolución de lo disponible" subtitle="Al cierre de cada mes, sin metas ni billeteras aparte" subtitleNumberOfLines={2} />
+            <Card.Title
+              title="Evolución de lo disponible"
+              subtitle={`${TEXTO_LINEA[escala]}, sin metas ni billeteras aparte`}
+              subtitleNumberOfLines={2}
+            />
             <Card.Content>
               <GraficoLineas
-                etiquetas={datos.patrimonio.map((p) => {
-                  const [a, m] = p.mes.split('-').map(Number);
-                  return `${MESES_CORTOS[m - 1]} ${a}`;
-                })}
+                key={escala}
+                etiquetas={datos.patrimonio.map((p) => p.mes)}
                 series={[{ nombre: 'Disponible', color: colores.ingresos, valores: datos.patrimonio.map((p) => (p.incompleto ? null : p.total)) }]}
                 formatear={(v) => formatearMonto(Math.round(v), monedaBase)}
               />

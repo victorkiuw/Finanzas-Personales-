@@ -141,7 +141,7 @@ export function resumirPeriodo(filas: FilaReporte[], conversor: Conversor, base:
 }
 
 export interface TotalMes {
-  /** "AAAA-MM" local. */
+  /** Clave del periodo (su inicio en ISO) o "AAAA-MM" en totalesPorMes. */
   mes: string;
   ingresos: number;
   gastos: number;
@@ -165,6 +165,25 @@ export function totalesPorMes(
   return meses.map((m) => porMes.get(m)!);
 }
 
+/** Ingresos y gastos en cada periodo [desde, hasta) indicado (días, semanas o meses). */
+export function totalesPorPeriodo(
+  filas: FilaReporte[],
+  conversor: Conversor,
+  base: Moneda,
+  periodos: { desde: Date; hasta: Date }[],
+): TotalMes[] {
+  const totales = periodos.map((p) => ({ mes: p.desde.toISOString(), ingresos: 0, gastos: 0 }));
+  for (const f of filas) {
+    const t = Date.parse(f.fecha);
+    const i = periodos.findIndex((p) => t >= p.desde.getTime() && t < p.hasta.getTime());
+    const monto = i >= 0 ? conversor.aBase(f.monto, f.moneda, base, f.fecha) : null;
+    if (monto === null) continue;
+    if (f.tipo === 'INGRESO') totales[i].ingresos += monto;
+    else totales[i].gastos += monto;
+  }
+  return totales;
+}
+
 export interface PuntoPatrimonio {
   /** "AAAA-MM". */
   mes: string;
@@ -183,6 +202,21 @@ export interface PuntoPatrimonio {
 export async function patrimonioPorMes(
   db: BaseDatos,
   meses: string[],
+  conversor: Conversor,
+  base: Moneda,
+): Promise<PuntoPatrimonio[]> {
+  const cortes = meses.map((mes) => {
+    const [a, m] = mes.split('-').map(Number);
+    return new Date(a, m, 1); // primer instante del mes siguiente (local)
+  });
+  const puntos = await disponibleAl(db, cortes, conversor, base);
+  return puntos.map((p, i) => ({ ...p, mes: meses[i] }));
+}
+
+/** Disponible justo antes de cada corte (ordenados), con las tasas del instante anterior al corte. */
+export async function disponibleAl(
+  db: BaseDatos,
+  cortes: Date[],
   conversor: Conversor,
   base: Moneda,
 ): Promise<PuntoPatrimonio[]> {
@@ -208,15 +242,13 @@ export async function patrimonioPorMes(
   for (const i of iniciales) saldo[i.moneda] = i.total;
   const puntos: PuntoPatrimonio[] = [];
   let k = 0;
-  for (const mes of meses) {
-    const [a, m] = mes.split('-').map(Number);
-    const finMes = new Date(a, m, 1); // primer instante del mes siguiente (local)
-    const limite = finMes.toISOString();
+  for (const corte of cortes) {
+    const limite = corte.toISOString();
     while (k < cambios.length && cambios[k].fecha < limite) {
       const c = cambios[k++];
       saldo[c.moneda] = (saldo[c.moneda] ?? 0) + c.delta;
     }
-    const ultimoDia = new Date(finMes.getTime() - 1).toISOString();
+    const ultimoDia = new Date(corte.getTime() - 1).toISOString();
     let total = 0;
     let incompleto = false;
     for (const [moneda, monto] of Object.entries(saldo) as [Moneda, number][]) {
@@ -224,7 +256,7 @@ export async function patrimonioPorMes(
       if (v === null) incompleto = true;
       else total += v;
     }
-    puntos.push({ mes, total, incompleto });
+    puntos.push({ mes: limite, total, incompleto });
   }
   return puntos;
 }
