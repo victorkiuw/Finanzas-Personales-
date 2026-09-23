@@ -6,6 +6,7 @@ import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import { Candado } from '../components/Candado';
+import { ModoDiscretoProvider } from '../components/ModoDiscreto';
 import { TasasProvider } from '../components/TasasProvider';
 import { migrar, NOMBRE_BD } from '../db/esquema';
 import { actualizarAvisosRecurrentes } from '../lib/avisos';
@@ -36,16 +37,22 @@ export default function RootLayout() {
         <PaperProvider theme={tema}>
           <StatusBar style={tema.dark ? 'light' : 'dark'} />
           <Candado>
-            <Stack
-              screenOptions={{
-                headerStyle: { backgroundColor: tema.colors.surface },
-                headerTintColor: tema.colors.onSurface,
-                headerShadowVisible: false,
-                contentStyle: { backgroundColor: tema.colors.background },
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            </Stack>
+            <ModoDiscretoProvider>
+              {(discreto) => (
+                <Stack
+                  // Al cambiar el modo discreto se vuelve a dibujar todo con los montos ocultos o visibles.
+                  key={discreto ? 'discreto' : 'normal'}
+                  screenOptions={{
+                    headerStyle: { backgroundColor: tema.colors.surface },
+                    headerTintColor: tema.colors.onSurface,
+                    headerShadowVisible: false,
+                    contentStyle: { backgroundColor: tema.colors.background },
+                  }}
+                >
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                </Stack>
+              )}
+            </ModoDiscretoProvider>
           </Candado>
         </PaperProvider>
       </TasasProvider>

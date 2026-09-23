@@ -2,8 +2,10 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import Tabs from 'expo-router/js-tabs';
 import type { ComponentProps } from 'react';
-import type { ColorValue } from 'react-native';
+import { View, type ColorValue } from 'react-native';
 import { IconButton, useTheme } from 'react-native-paper';
+
+import { useModoDiscreto } from '../../components/ModoDiscreto';
 
 type NombreIcono = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -13,6 +15,7 @@ const icono =
 
 export default function TabsLayout() {
   const tema = useTheme();
+  const { discreto, alternar } = useModoDiscreto();
 
   return (
     <Tabs
@@ -33,7 +36,14 @@ export default function TabsLayout() {
           headerTitle: 'Resumen',
           tabBarIcon: icono('home'),
           headerRight: () => (
-            <IconButton icon="cog" accessibilityLabel="Ajustes" onPress={() => router.push('/ajustes')} />
+            <View style={{ flexDirection: 'row' }}>
+              <IconButton
+                icon={discreto ? 'eye-off' : 'eye'}
+                accessibilityLabel={discreto ? 'Mostrar montos' : 'Ocultar todos los montos'}
+                onPress={alternar}
+              />
+              <IconButton icon="cog" accessibilityLabel="Ajustes" onPress={() => router.push('/ajustes')} />
+            </View>
           ),
         }}
       />

@@ -37,10 +37,21 @@ export function formatearNumero(centimos: number): string {
   return `${negativo ? '-' : ''}${entero},${decimales}`;
 }
 
+let discreto = false;
+
+/** Modo discreto: todos los montos que se muestran salen como "•••" (lo activa la app). */
+export function establecerModoDiscreto(activo: boolean): void {
+  discreto = activo;
+}
+
+export function modoDiscreto(): boolean {
+  return discreto;
+}
+
 /** El signo va siempre delante: "-Bs. 350,00", "-$25,50", "-3,00 USDT", "-12,00 €". */
 export function formatearMonto(centimos: number, moneda: Moneda): string {
-  const numero = formatearNumero(Math.abs(centimos));
-  const signo = centimos < 0 ? '-' : '';
+  const numero = discreto ? '•••' : formatearNumero(Math.abs(centimos));
+  const signo = centimos < 0 && !discreto ? '-' : '';
   switch (moneda) {
     case 'USD':
       return `${signo}$${numero}`;
