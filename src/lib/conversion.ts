@@ -49,3 +49,39 @@ export function totalConsolidado(
 export function brecha(bcv: number, paralelo: number): number {
   return (paralelo / bcv - 1) * 100;
 }
+
+/** Tasas del día para la calculadora: cada moneda con su propia tasa en bolívares. */
+export interface TasasNaturales {
+  /** Bs. por dólar BCV. */
+  bcv: number | null;
+  /** Bs. por USDT (mercado). */
+  usdt: number | null;
+  /** Bs. por euro BCV. */
+  euro: number | null;
+}
+
+/** Bs. por unidad con la tasa que corresponde a cada moneda: $ → BCV, USDT → USDT, € → euro BCV. */
+export function tasaNatural(m: Moneda, t: TasasNaturales): number | null {
+  if (m === 'BS') return 1;
+  if (m === 'USD') return t.bcv;
+  if (m === 'USDT') return t.usdt;
+  return t.euro;
+}
+
+/**
+ * Conversión de la calculadora: cada moneda con su tasa (bolívares a USDT con la
+ * tasa USDT, a dólares con la BCV, a euros con el euro BCV). USD y USDT van 1:1
+ * entre sí; euros y dólares se relacionan con el euro/dólar del BCV.
+ */
+export function convertirNatural(centimos: number, de: Moneda, a: Moneda, t: TasasNaturales): number | null {
+  if (equivalentes(de, a)) return centimos;
+  if (de === 'BS' || a === 'BS') {
+    const tasaDe = tasaNatural(de, t);
+    const tasaA = tasaNatural(a, t);
+    if (!tasaDe || !tasaA) return null;
+    return Math.round((centimos * tasaDe) / tasaA);
+  }
+  // Euros ↔ dólares (USD o USDT): relación del BCV.
+  if (!t.euro || !t.bcv) return null;
+  return de === 'EUR' ? Math.round((centimos * t.euro) / t.bcv) : Math.round((centimos * t.bcv) / t.euro);
+}

@@ -17,9 +17,9 @@ import {
 
 import { GraficoLineas } from '../../components/GraficoLineas';
 import { useTasas } from '../../components/TasasProvider';
-import { alinearHistoriales, cambioDe, listarHistorial } from '../../db/tasas';
-import { NOMBRE_PAR, PARES, TODOS_LOS_PARES, type Par } from '../../lib/api-tasas';
-import { brecha, convertir } from '../../lib/conversion';
+import { alinearHistoriales, listarHistorial } from '../../db/tasas';
+import { NOMBRE_PAR, TODOS_LOS_PARES, type Par } from '../../lib/api-tasas';
+import { brecha, convertirNatural, type TasasNaturales } from '../../lib/conversion';
 import { fechaSimpleLegible, formatearFechaCorta, haceCuanto } from '../../lib/fechas';
 import { formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../../lib/moneda';
 import { formatearTasa, parsearTasa, tasaATexto } from '../../lib/tasa';
@@ -44,6 +44,16 @@ const DESCRIPCION_PAR: Record<Par, string> = {
 };
 
 type Historial = { dia: string; tasa: number }[];
+
+/** Qué tasa se usó para pasar de una moneda a otra en la calculadora. */
+function etiquetaTasa(de: Moneda, a: Moneda): string {
+  if ((de === 'USD' || de === 'USDT') && (a === 'USD' || a === 'USDT')) return '1:1';
+  const otra = de === 'BS' ? a : a === 'BS' ? de : null;
+  if (otra === 'USD') return 'tasa BCV';
+  if (otra === 'USDT') return 'tasa USDT';
+  if (otra === 'EUR') return 'euro BCV';
+  return 'euro/dólar BCV';
+}
 
 export default function PantallaTasas() {
   const tema = useTheme();
@@ -72,6 +82,11 @@ export default function PantallaTasas() {
 
   const monto = parsearMonto(montoTexto);
   const otras = MONEDAS.filter((m) => m !== moneda);
+  const naturales: TasasNaturales = {
+    bcv: tasas.BCV?.tasa ?? null,
+    usdt: tasas.PARALELO?.tasa ?? null,
+    euro: tasas.EURO?.tasa ?? null,
+  };
   const bcv = tasas.BCV?.tasa;
   const paralelo = tasas.PARALELO?.tasa;
 
@@ -108,39 +123,35 @@ export default function PantallaTasas() {
         />
         {monto === null && montoTexto.trim() !== '' && <HelperText type="error">Número no válido</HelperText>}
 
-        {PARES.map((par) => {
-          const cambio = cambioDe(tasas, par);
-          const tasa = cambio.dolar;
-          return (
-            <Card key={par} mode="outlined">
-              <Card.Content style={styles.resultado}>
-                <Text variant="labelLarge" style={{ color: tema.colors.onSurfaceVariant }}>
-                  {`Con tasa ${NOMBRE_PAR[par]}`}
-                </Text>
-                {tasa && (
-                  <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-                    {`$1 = Bs. ${formatearTasa(tasa)}${cambio.euro ? ` · €1 = Bs. ${formatearTasa(cambio.euro)} · €1 = $${formatearTasa(cambio.euro / tasa)}` : ' · sin tasa del euro'}`}
+        <Card mode="outlined">
+          <Card.Content style={styles.resultado}>
+            <Text variant="labelLarge" style={{ color: tema.colors.onSurfaceVariant }}>
+              Equivale a
+            </Text>
+            {otras.map((m) => {
+              const v = monto !== null ? convertirNatural(monto, moneda, m, naturales) : null;
+              // Dólares ↔ bolívares: también a la tasa USDT, que es la de la calle.
+              const alterna =
+                monto !== null && ((moneda === 'USD' && m === 'BS') || (moneda === 'BS' && m === 'USD')) && naturales.usdt
+                  ? convertirNatural(monto, moneda === 'USD' ? 'USDT' : 'BS', moneda === 'USD' ? 'BS' : 'USDT', naturales)
+                  : null;
+              return (
+                <View key={m} style={styles.lineaResultado}>
+                  <Text variant="headlineSmall" style={styles.cifra}>
+                    {v !== null ? formatearMonto(v, m) : '—'}
                   </Text>
-                )}
-                {!tasa ? (
-                  <Text variant="bodyMedium">Sin tasa disponible.</Text>
-                ) : (
-                  otras.map((m) => {
-                    const v = monto !== null ? convertir(monto, moneda, m, cambio) : null;
-                    return (
-                      <Text key={m} variant="headlineSmall" style={styles.cifra}>
-                        {v !== null ? formatearMonto(v, m) : '—'}
-                      </Text>
-                    );
-                  })
-                )}
-              </Card.Content>
-            </Card>
-          );
-        })}
+                  <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                    {etiquetaTasa(moneda, m)}
+                    {alterna !== null ? ` · a tasa USDT: ${formatearMonto(alterna, m)}` : ''}
+                  </Text>
+                </View>
+              );
+            })}
+          </Card.Content>
+        </Card>
         <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-          USD y USDT se toman como equivalentes (1:1). El bolívar se convierte con cada tasa; el euro, con el euro
-          BCV (y con la tasa USDT, manteniendo la misma relación euro/dólar).
+          Cada moneda con su tasa: los dólares con la BCV, el USDT con la tasa USDT y los euros con el euro BCV. USD y
+          USDT se toman 1:1 entre sí.
         </Text>
 
         <Divider style={styles.divisor} />
@@ -240,7 +251,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   contenido: { padding: 16, gap: 12, paddingBottom: 48 },
   monto: { fontSize: 24 },
-  resultado: { gap: 2 },
+  resultado: { gap: 8 },
+  lineaResultado: { gap: 0 },
   cifra: { fontVariant: ['tabular-nums'], fontWeight: '600' },
   divisor: { marginVertical: 8 },
   filaTitulo: { flexDirection: 'row', alignItems: 'center' },

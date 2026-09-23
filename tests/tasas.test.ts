@@ -178,3 +178,17 @@ test('tasa de un día: la de ese día o la última anterior (fines de semana)', 
   assert.equal(await tasaDelDia(db, 'PARALELO', '2026-09-15'), 940);
   assert.equal(await tasaDelDia(db, 'BCV', '2026-01-01'), null);
 });
+
+test('calculadora: cada moneda con su propia tasa', async () => {
+  const { convertirNatural } = await import('../src/lib/conversion');
+  const t = { bcv: 852.42, usdt: 953.25, euro: 978.17 };
+  // Bs. 15.500: dólares a BCV, USDT a tasa USDT, euros a euro BCV.
+  assert.equal(convertirNatural(1550000, 'BS', 'USD', t), 1818);
+  assert.equal(convertirNatural(1550000, 'BS', 'USDT', t), 1626);
+  assert.equal(convertirNatural(1550000, 'BS', 'EUR', t), 1585);
+  // 100 USDT = Bs. 95.325; $100 = 100 USDT; €100 = $114,75.
+  assert.equal(convertirNatural(10000, 'USDT', 'BS', t), 9532500);
+  assert.equal(convertirNatural(10000, 'USD', 'USDT', t), 10000);
+  assert.equal(convertirNatural(10000, 'EUR', 'USDT', t), 11475);
+  assert.equal(convertirNatural(10000, 'EUR', 'BS', { ...t, euro: null }), null);
+});
