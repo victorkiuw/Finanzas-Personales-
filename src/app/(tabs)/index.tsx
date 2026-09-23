@@ -32,6 +32,7 @@ import { NOMBRE_PAR } from '../../lib/api-tasas';
 import { claveDia, nombreMes, rangoMes } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
 import { DIAS_AVISO_EXPORTAR, diasSinExportar } from '../../lib/respaldoAuto';
+import { actualizarWidget } from '../../widget/manejador';
 
 const MESES_GRAFICO = 6;
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -84,6 +85,8 @@ export default function PantallaInicio() {
     const meses12 = Array.from({ length: 12 }, (_, i) => claveMes(new Date(mes.getFullYear(), mes.getMonth() - 11 + i, 1)));
     const patrimonio = await patrimonioPorMes(db, meses12, new Conversor(historial, tasas[referencia]?.tasa ?? null), monedaBase);
     const sinExportar = await diasSinExportar(db);
+    // Mantiene al día el widget de la pantalla de inicio (si el usuario lo agregó).
+    actualizarWidget(db).catch(() => {});
     setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias, pendientes, patrimonio, sinExportar });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
   }, [db, mes, referencia, versionHistorial, monedaBase, tasas]);

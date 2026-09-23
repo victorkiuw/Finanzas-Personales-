@@ -14,6 +14,7 @@ Especificación completa: ver el documento del proyecto (fases 1–5).
 | 2 | Registro de gastos, ingresos y transferencias | ✅ |
 | 3 | Tasas BCV / paralelo (ve.dolarapi.com) con caché y calculadora | ✅ |
 | 4 | Dashboard con gráficas y metas de ahorro | ✅ |
+| + | Deudas/préstamos indexados al dólar, presupuestos, recurrentes, recordatorios, buscador, alertas y gráfico de tasas, evolución del patrimonio, bloqueo con huella, copias automáticas, CSV y widget | ✅ |
 | 5 | Pulido y APK final | ⏳ |
 
 ## Instalar en el teléfono (sin PC)

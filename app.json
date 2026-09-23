@@ -25,7 +25,24 @@
       "expo-router",
       "expo-sqlite",
       "expo-notifications",
-      "expo-local-authentication"
+      "expo-local-authentication",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "Resumen",
+              "label": "Finanzas: patrimonio y tasas",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "description": "Tu patrimonio y las tasas BCV y paralelo del día",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ]
   }
 }
