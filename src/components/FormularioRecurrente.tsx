@@ -50,8 +50,10 @@ export function FormularioRecurrente({ id }: { id?: number }) {
         setBilleteraId(b[0]?.id ?? null);
       } else {
         const r = await obtenerRecurrente(db, id);
-        if (!r) {
-          router.back();
+        if (!r || r.tipo === 'APORTE_META') {
+          // Los aportes automáticos se editan desde su meta.
+          if (r?.meta_id) router.replace(`/meta/${r.meta_id}`);
+          else router.back();
           return;
         }
         setNombre(r.nombre);

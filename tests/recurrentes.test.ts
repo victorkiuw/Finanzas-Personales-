@@ -66,3 +66,30 @@ test('automáticos se registran solos (también los atrasados); manuales esperan
   // Repetir el proceso el mismo día no duplica nada.
   assert.equal((await procesarRecurrentes(db, new Date(2026, 8, 22, 18))).creados, 0);
 });
+
+test('aporte automático a una meta y proyección', async () => {
+  const { crearBdMemoria } = await import('./bd-memoria');
+  const { crearBilletera, obtenerBilletera } = await import('../src/db/billeteras');
+  const { crearMeta, obtenerMeta } = await import('../src/db/metas');
+  const { aporteDeMeta, guardarAporteDeMeta, procesarRecurrentes, proyeccionMeta } = await import('../src/db/recurrentes');
+  const db = await crearBdMemoria();
+  const usd = await crearBilletera(db, { icono: 'x', color_hex: '#000', nombre: 'Efectivo', moneda: 'USD', balance_inicial: 10000 });
+  const bs = await crearBilletera(db, { icono: 'x', color_hex: '#000', nombre: 'Banco', moneda: 'BS', balance_inicial: 0 });
+  const meta = await crearMeta(db, { nombre: 'Moto', monto_objetivo: 150000, moneda: 'USD', fecha_objetivo: null, color_hex: '#000' });
+
+  await assert.rejects(
+    guardarAporteDeMeta(db, meta, { monto: 2000, billetera_id: bs, frecuencia: 'QUINCENAL', proxima_fecha: '2026-09-15' }),
+    /misma moneda/,
+  );
+  await guardarAporteDeMeta(db, meta, { monto: 2000, billetera_id: usd, frecuencia: 'QUINCENAL', proxima_fecha: '2026-09-15' });
+  // Al abrir la app el 23 sep se registra el aporte del 15 (el del 30 aún no toca).
+  await procesarRecurrentes(db, new Date(2026, 8, 23, 10));
+  assert.equal((await obtenerMeta(db, meta))!.saldo, 2000);
+  assert.equal((await obtenerBilletera(db, usd))!.saldo, 8000);
+  const a = (await aporteDeMeta(db, meta))!;
+  assert.equal(a.proxima_fecha, '2026-09-30');
+  // Faltan $1.480 a $20 por quincena: 74 aportes; el primero el 30 sep 2026 y el último el 15 oct 2029.
+  assert.deepEqual(proyeccionMeta(148000, a), { aportes: 74, fecha: '2029-10-15' });
+  await guardarAporteDeMeta(db, meta, null);
+  assert.equal(await aporteDeMeta(db, meta), null);
+});

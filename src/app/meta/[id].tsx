@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { Button, Card, IconButton } from 'react-native-paper';
 
+import { AporteAutomatico } from '../../components/AporteAutomatico';
 import { DialogoFondosMeta } from '../../components/DialogoFondosMeta';
 import { ListaMovimientos } from '../../components/ListaMovimientos';
 import { ResumenMeta } from '../../components/TarjetaMeta';
@@ -76,6 +77,7 @@ export default function DetalleMeta() {
                   </Button>
                 </View>
               )}
+              {!meta.archivada && <AporteAutomatico meta={meta} onCambio={cargar} />}
             </View>
           ) : undefined
         }

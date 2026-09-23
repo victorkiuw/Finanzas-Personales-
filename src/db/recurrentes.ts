@@ -1,5 +1,6 @@
 import type { Moneda } from '../lib/moneda';
 import { ErrorValidacion } from './billeteras';
+import { moverFondosMeta } from './metas';
 import { crearMovimiento } from './movimientos';
 import type { BaseDatos } from './tipos';
 
@@ -17,13 +18,17 @@ export const NOMBRE_FRECUENCIA: Record<Frecuencia, string> = {
   MENSUAL: 'Cada mes',
 };
 
+export type TipoRecurrente = 'GASTO' | 'INGRESO' | 'APORTE_META';
+
 export interface Recurrente {
   id: number;
   nombre: string;
-  tipo: 'GASTO' | 'INGRESO';
+  tipo: TipoRecurrente;
   monto: number;
   billetera_id: number;
-  categoria_id: number;
+  /** Null en los aportes automáticos a metas. */
+  categoria_id: number | null;
+  meta_id: number | null;
   frecuencia: Frecuencia;
   dia_ancla: number;
   /** "AAAA-MM-DD". */
@@ -38,10 +43,11 @@ export interface Recurrente {
 
 export interface DatosRecurrente {
   nombre: string;
-  tipo: 'GASTO' | 'INGRESO';
+  tipo: TipoRecurrente;
   monto: number;
   billetera_id: number;
-  categoria_id: number;
+  categoria_id: number | null;
+  meta_id?: number | null;
   frecuencia: Frecuencia;
   proxima_fecha: string;
   automatico: boolean;
@@ -78,10 +84,10 @@ type Fila = Omit<Recurrente, 'automatico' | 'activo'> & { automatico: number; ac
 
 const SELECT = `
   SELECT r.*, b.nombre AS billetera_nombre, b.moneda AS billetera_moneda,
-    c.icono AS categoria_icono, c.color_hex AS categoria_color
+    COALESCE(c.icono, 'piggy-bank') AS categoria_icono, COALESCE(c.color_hex, '#1565C0') AS categoria_color
   FROM recurrentes r
   JOIN billeteras b ON b.id = r.billetera_id
-  JOIN categorias c ON c.id = r.categoria_id`;
+  LEFT JOIN categorias c ON c.id = r.categoria_id`;
 
 const aRecurrente = (f: Fila): Recurrente => ({ ...f, automatico: f.automatico === 1, activo: f.activo === 1 });
 
@@ -100,19 +106,25 @@ async function validar(db: BaseDatos, d: DatosRecurrente): Promise<DatosRecurren
   if (!Number.isSafeInteger(d.monto) || d.monto <= 0) throw new ErrorValidacion('El monto debe ser mayor que cero.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.proxima_fecha)) throw new ErrorValidacion('La fecha no es válida.');
   if (!['SEMANAL', 'QUINCENAL', 'MENSUAL'].includes(d.frecuencia)) throw new ErrorValidacion('Frecuencia inválida.');
-  const cat = await db.getFirstAsync<{ tipo: string }>(`SELECT tipo FROM categorias WHERE id = ?`, [d.categoria_id]);
-  if (!cat || cat.tipo !== d.tipo) throw new ErrorValidacion('Elige una categoría del tipo correcto.');
-  const b = await db.getFirstAsync<{ id: number }>(`SELECT id FROM billeteras WHERE id = ? AND archivada = 0`, [d.billetera_id]);
+  const b = await db.getFirstAsync<{ id: number; moneda: Moneda }>(`SELECT id, moneda FROM billeteras WHERE id = ? AND archivada = 0`, [d.billetera_id]);
   if (!b) throw new ErrorValidacion('Elige una billetera activa.');
-  return { ...d, nombre };
+  if (d.tipo === 'APORTE_META') {
+    const meta = await db.getFirstAsync<{ moneda: Moneda }>(`SELECT moneda FROM metas_ahorro WHERE id = ?`, [d.meta_id ?? 0]);
+    if (!meta) throw new ErrorValidacion('La meta no existe.');
+    if (meta.moneda !== b.moneda) throw new ErrorValidacion('Elige una billetera en la misma moneda que la meta.');
+    return { ...d, nombre, categoria_id: null };
+  }
+  const cat = await db.getFirstAsync<{ tipo: string }>(`SELECT tipo FROM categorias WHERE id = ?`, [d.categoria_id ?? 0]);
+  if (!cat || cat.tipo !== d.tipo) throw new ErrorValidacion('Elige una categoría del tipo correcto.');
+  return { ...d, nombre, meta_id: null };
 }
 
 export async function crearRecurrente(db: BaseDatos, datos: DatosRecurrente): Promise<number> {
   const d = await validar(db, datos);
   const r = await db.runAsync(
-    `INSERT INTO recurrentes (nombre, tipo, monto, billetera_id, categoria_id, frecuencia, dia_ancla, proxima_fecha, automatico)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [d.nombre, d.tipo, d.monto, d.billetera_id, d.categoria_id, d.frecuencia, Number(d.proxima_fecha.slice(8)), d.proxima_fecha, d.automatico ? 1 : 0],
+    `INSERT INTO recurrentes (nombre, tipo, monto, billetera_id, categoria_id, meta_id, frecuencia, dia_ancla, proxima_fecha, automatico)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [d.nombre, d.tipo, d.monto, d.billetera_id, d.categoria_id, d.meta_id ?? null, d.frecuencia, Number(d.proxima_fecha.slice(8)), d.proxima_fecha, d.automatico ? 1 : 0],
   );
   return r.lastInsertRowId;
 }
@@ -120,9 +132,9 @@ export async function crearRecurrente(db: BaseDatos, datos: DatosRecurrente): Pr
 export async function actualizarRecurrente(db: BaseDatos, id: number, datos: DatosRecurrente & { activo: boolean }): Promise<void> {
   const d = await validar(db, datos);
   await db.runAsync(
-    `UPDATE recurrentes SET nombre = ?, tipo = ?, monto = ?, billetera_id = ?, categoria_id = ?, frecuencia = ?,
+    `UPDATE recurrentes SET nombre = ?, tipo = ?, monto = ?, billetera_id = ?, categoria_id = ?, meta_id = ?, frecuencia = ?,
        dia_ancla = ?, proxima_fecha = ?, automatico = ?, activo = ? WHERE id = ?`,
-    [d.nombre, d.tipo, d.monto, d.billetera_id, d.categoria_id, d.frecuencia, Number(d.proxima_fecha.slice(8)), d.proxima_fecha,
+    [d.nombre, d.tipo, d.monto, d.billetera_id, d.categoria_id, d.meta_id ?? null, d.frecuencia, Number(d.proxima_fecha.slice(8)), d.proxima_fecha,
       d.automatico ? 1 : 0, datos.activo ? 1 : 0, id],
   );
 }
@@ -148,6 +160,18 @@ async function avanzar(db: BaseDatos, r: Recurrente) {
 export async function confirmarRecurrente(db: BaseDatos, id: number, monto?: number): Promise<void> {
   const r = await obtenerRecurrente(db, id);
   if (!r) throw new ErrorValidacion('No existe.');
+  if (r.tipo === 'APORTE_META') {
+    await moverFondosMeta(db, {
+      tipo: 'APORTE_META',
+      meta_id: r.meta_id!,
+      billetera_id: r.billetera_id,
+      monto: monto ?? r.monto,
+      fecha: fechaDelDia(r.proxima_fecha),
+      nota: 'Aporte automático',
+    });
+    await avanzar(db, r);
+    return;
+  }
   await crearMovimiento(db, {
     tipo: r.tipo,
     monto: monto ?? r.monto,
@@ -186,4 +210,38 @@ export async function procesarRecurrentes(db: BaseDatos, hoy = new Date()): Prom
     }
   }
   return { creados, pendientes };
+}
+
+/** Aporte automático de una meta (o null si no tiene). */
+export async function aporteDeMeta(db: BaseDatos, metaId: number): Promise<Recurrente | null> {
+  const f = await db.getFirstAsync<Fila>(`${SELECT} WHERE r.tipo = 'APORTE_META' AND r.meta_id = ? LIMIT 1`, [metaId]);
+  return f ? aRecurrente(f) : null;
+}
+
+/** Crea, cambia o (con null) quita el aporte automático de una meta. */
+export async function guardarAporteDeMeta(
+  db: BaseDatos,
+  metaId: number,
+  datos: { monto: number; billetera_id: number; frecuencia: Frecuencia; proxima_fecha: string } | null,
+): Promise<void> {
+  const actual = await aporteDeMeta(db, metaId);
+  if (!datos) {
+    if (actual) await eliminarRecurrente(db, actual.id);
+    return;
+  }
+  const d: DatosRecurrente = { ...datos, nombre: 'Aporte a meta', tipo: 'APORTE_META', categoria_id: null, meta_id: metaId, automatico: true };
+  if (actual) await actualizarRecurrente(db, actual.id, { ...d, activo: true });
+  else await crearRecurrente(db, d);
+}
+
+/** Con aportes fijos: cuántos faltan y la fecha del último para llegar al objetivo. */
+export function proyeccionMeta(
+  falta: number,
+  aporte: { monto: number; frecuencia: Frecuencia; proxima_fecha: string; dia_ancla: number },
+): { aportes: number; fecha: string } | null {
+  if (falta <= 0 || aporte.monto <= 0) return null;
+  const aportes = Math.ceil(falta / aporte.monto);
+  let fecha = aporte.proxima_fecha;
+  for (let i = 1; i < aportes && i < 1000; i++) fecha = siguienteFecha(fecha, aporte.frecuencia, aporte.dia_ancla);
+  return { aportes, fecha };
 }

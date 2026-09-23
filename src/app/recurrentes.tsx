@@ -38,7 +38,7 @@ export default function PantallaRecurrentes() {
             description={`${NOMBRE_FRECUENCIA[r.frecuencia]} · ${r.activo ? `próxima: ${fechaSimpleLegible(r.proxima_fecha)}` : 'pausado'} · ${r.automatico ? 'automático' : 'con aviso'}`}
             descriptionNumberOfLines={2}
             style={!r.activo && styles.inactivo}
-            onPress={() => router.push(`/recurrente/${r.id}`)}
+            onPress={() => router.push(r.tipo === 'APORTE_META' ? `/meta/${r.meta_id}` : `/recurrente/${r.id}`)}
             left={() => (
               <Avatar.Icon size={36} icon={r.categoria_icono} color="#FFFFFF" style={[styles.icono, { backgroundColor: r.categoria_color }]} />
             )}
