@@ -1,21 +1,62 @@
+import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import { router, Stack } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet } from 'react-native';
-import { ActivityIndicator, Divider, List, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Divider, List, Switch, Text, useTheme } from 'react-native-paper';
 
 import { useTasas } from '../components/TasasProvider';
 import { exportarDatos, importarDatos, resumenRespaldo, validarRespaldo, type Respaldo } from '../db/respaldo';
+import { guardarPreferencia, leerPreferencia } from '../db/preferencias';
 import { claveDia } from '../lib/fechas';
+import { cancelarRecordatorioDiario, pedirPermiso, programarRecordatorioDiario } from '../lib/notificaciones';
+
+const CLAVE_RECORDATORIO = 'recordatorio_hora';
 
 export default function PantallaAjustes() {
   const db = useSQLiteContext();
   const tema = useTheme();
   const { actualizar } = useTasas();
   const [trabajando, setTrabajando] = useState<string | null>(null);
+  // "HH:MM" si el recordatorio diario está activo.
+  const [recordatorio, setRecordatorio] = useState<string | null>(null);
+
+  useEffect(() => {
+    leerPreferencia(db, CLAVE_RECORDATORIO).then(setRecordatorio).catch(() => {});
+  }, [db]);
+
+  const elegirHoraRecordatorio = async () => {
+    if (!(await pedirPermiso())) {
+      Alert.alert('Sin permiso', 'Activa las notificaciones de la app en los ajustes de Android para recibir el recordatorio.');
+      return;
+    }
+    const [h, m] = (recordatorio ?? '21:00').split(':').map(Number);
+    DateTimePickerAndroid.open({
+      value: new Date(2000, 0, 1, h, m),
+      mode: 'time',
+      is24Hour: true,
+      onChange: async (e, f) => {
+        if (e.type !== 'set' || !f) return;
+        const hora = `${String(f.getHours()).padStart(2, '0')}:${String(f.getMinutes()).padStart(2, '0')}`;
+        await programarRecordatorioDiario(f.getHours(), f.getMinutes());
+        await guardarPreferencia(db, CLAVE_RECORDATORIO, hora);
+        setRecordatorio(hora);
+      },
+    });
+  };
+
+  const alternarRecordatorio = async (activar: boolean) => {
+    if (activar) {
+      await elegirHoraRecordatorio();
+      return;
+    }
+    await cancelarRecordatorioDiario();
+    await db.runAsync(`DELETE FROM preferencias WHERE clave = ?`, [CLAVE_RECORDATORIO]);
+    setRecordatorio(null);
+  };
 
   const exportar = async () => {
     setTrabajando('Preparando la copia…');
@@ -88,6 +129,20 @@ export default function PantallaAjustes() {
           left={(p) => <List.Icon {...p} icon="tag-multiple" />}
           right={(p) => <List.Icon {...p} icon="chevron-right" />}
           onPress={() => router.push('/categorias')}
+        />
+        <List.Item
+          title="Gastos e ingresos recurrentes"
+          description="Alquiler, internet, sueldo… se anotan solos o te aviso"
+          left={(p) => <List.Icon {...p} icon="calendar-refresh" />}
+          right={(p) => <List.Icon {...p} icon="chevron-right" />}
+          onPress={() => router.push('/recurrentes')}
+        />
+        <List.Item
+          title="Recordatorio diario"
+          description={recordatorio ? `Todos los días a las ${recordatorio} · toca para cambiar la hora` : 'Te aviso para que anotes tus gastos'}
+          left={(p) => <List.Icon {...p} icon="bell-ring" />}
+          right={() => <Switch value={recordatorio !== null} onValueChange={alternarRecordatorio} />}
+          onPress={recordatorio ? elegirHoraRecordatorio : () => alternarRecordatorio(true)}
         />
         <List.Item
           title="Presupuestos mensuales"

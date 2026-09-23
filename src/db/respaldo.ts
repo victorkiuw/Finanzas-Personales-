@@ -9,7 +9,7 @@ import { enTransaccion, type BaseDatos, type ValorSQL } from './tipos';
 export const APP_RESPALDO = 'finanzas-personales';
 
 /** En orden de inserción: primero lo que otras tablas referencian. */
-const TABLAS = ['billeteras', 'categorias', 'presupuestos', 'metas_ahorro', 'deudas', 'transacciones', 'tasas_cache', 'preferencias'] as const;
+const TABLAS = ['billeteras', 'categorias', 'presupuestos', 'metas_ahorro', 'deudas', 'transacciones', 'recurrentes', 'tasas_cache', 'preferencias'] as const;
 
 type Fila = Record<string, ValorSQL>;
 

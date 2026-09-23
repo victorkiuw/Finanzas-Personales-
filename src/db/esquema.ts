@@ -201,6 +201,22 @@ const MIGRACIONES: string[] = [
     moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS', 'USDT'))
   );
   `,
+  // v8: gastos e ingresos recurrentes (alquiler, internet, sueldo...).
+  `
+  CREATE TABLE recurrentes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('GASTO', 'INGRESO')),
+    monto INTEGER NOT NULL CHECK (monto > 0),
+    billetera_id INTEGER NOT NULL REFERENCES billeteras (id) ON DELETE CASCADE,
+    categoria_id INTEGER NOT NULL REFERENCES categorias (id) ON DELETE CASCADE,
+    frecuencia TEXT NOT NULL CHECK (frecuencia IN ('SEMANAL', 'QUINCENAL', 'MENSUAL')),
+    dia_ancla INTEGER NOT NULL CHECK (dia_ancla BETWEEN 1 AND 31),
+    proxima_fecha TEXT NOT NULL,
+    automatico INTEGER NOT NULL DEFAULT 0 CHECK (automatico IN (0, 1)),
+    activo INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1))
+  );
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

@@ -9,11 +9,13 @@ import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
 import { BarrasCategorias, ColumnasMensuales, coloresSeries } from '../../components/graficos';
 import { ItemMovimiento } from '../../components/ItemMovimiento';
 import { ResumenSaldo } from '../../components/ResumenSaldo';
+import { TarjetaPendientes } from '../../components/TarjetaPendientes';
 import { useTasas } from '../../components/TasasProvider';
 import { listarBilleteras, type Billetera } from '../../db/billeteras';
 import { listarCategorias, type Categoria } from '../../db/categorias';
 import { listarMetas, type Meta } from '../../db/metas';
 import { estadoPresupuestos, listarPresupuestos, type Presupuesto } from '../../db/presupuestos';
+import { procesarRecurrentes, type Recurrente } from '../../db/recurrentes';
 import { listarMovimientos, type Movimiento } from '../../db/movimientos';
 import {
   Conversor,
@@ -42,6 +44,7 @@ interface Datos {
   historial: { dia: string; tasa: number }[];
   presupuestos: Presupuesto[];
   categorias: Categoria[];
+  pendientes: Recurrente[];
 }
 
 export default function PantallaInicio() {
@@ -57,6 +60,8 @@ export default function PantallaInicio() {
 
   const cargar = useCallback(async () => {
     // Se leen los 6 meses del gráfico; el mes elegido es el último.
+    // Primero se registran los recurrentes automáticos que tocaban, para que salgan en los reportes.
+    const { pendientes } = await procesarRecurrentes(db);
     const desde = rangoMes(mes, -(MESES_GRAFICO - 1)).desde;
     const hasta = rangoMes(mes).hasta;
     const [billeteras, metas, recientes, filas, historial, presupuestos, categorias] = await Promise.all([
@@ -68,7 +73,7 @@ export default function PantallaInicio() {
       listarPresupuestos(db),
       listarCategorias(db, 'GASTO', { incluirArchivadas: true }),
     ]);
-    setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias });
+    setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias, pendientes });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
   }, [db, mes, referencia, versionHistorial]);
 
@@ -120,6 +125,7 @@ export default function PantallaInicio() {
     <View style={styles.flex}>
       <ScrollView contentContainerStyle={styles.contenido}>
         <CintaTasas />
+        <TarjetaPendientes pendientes={datos.pendientes} onCambio={() => cargar().catch(() => {})} />
         <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carrusel}>
