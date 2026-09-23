@@ -9,7 +9,6 @@ import {
   Chip,
   HelperText,
   SegmentedButtons,
-  Switch,
   Text,
   TextInput,
   useTheme,
@@ -31,6 +30,8 @@ import { parsearTasa, tasaATexto } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
+const NOMBRE_CORTO: Record<Moneda, string> = { BS: 'Bolívares', USD: 'Dólares', USDT: 'USDT', EUR: 'Euros' };
+
 function aClaveFecha(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -49,7 +50,6 @@ export function FormularioDeuda({ id }: { id?: number }) {
   const [persona, setPersona] = useState('');
   const [moneda, setMoneda] = useState<Moneda>('BS');
   const [montoTexto, setMontoTexto] = useState('');
-  const [indexada, setIndexada] = useState(true);
   const [tasaTexto, setTasaTexto] = useState('');
   const [fecha, setFecha] = useState(() => new Date());
   const [fechaLimite, setFechaLimite] = useState<string | null>(null);
@@ -72,7 +72,6 @@ export function FormularioDeuda({ id }: { id?: number }) {
         setPersona(d.persona);
         setMoneda(d.moneda);
         setMontoTexto(centimosATexto(d.monto));
-        setIndexada(d.tasa_referencia !== null);
         setTasaTexto(d.tasa_referencia ? tasaATexto(d.tasa_referencia) : '');
         setBilleteraId(await billeteraDeDeuda(db, id));
         setTienePagos(d.pagado > 0);
@@ -86,7 +85,8 @@ export function FormularioDeuda({ id }: { id?: number }) {
 
   const monto = parsearMonto(montoTexto);
   const tasa = parsearTasa(tasaTexto);
-  const usaTasa = moneda === 'BS' && indexada;
+  // Si se prestaron bolívares, se devuelven bolívares al valor del dólar del día: siempre lleva tasa.
+  const usaTasa = moneda === 'BS';
   const enDolares = usaTasa && monto && monto > 0 && tasa ? totalEnUnidad(monto, 'BS', tasa) : null;
   const billeterasMoneda = billeteras.filter((b) => b.moneda === moneda);
 
@@ -122,7 +122,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
       return;
     }
     if (usaTasa && !tasa) {
-      setError('Escribe la tasa a la que valoras el préstamo, o desactiva "Llevar la cuenta en dólares".');
+      setError('Escribe a cuánto estaba el dólar el día del préstamo.');
       return;
     }
     setGuardando(true);
@@ -184,11 +184,19 @@ export function FormularioDeuda({ id }: { id?: number }) {
           autoFocus={!editando}
         />
 
-        <SegmentedButtons
-          value={moneda}
-          onValueChange={(v) => cambiarMoneda(v as Moneda)}
-          buttons={MONEDAS.map((m) => ({ value: m, label: INFO_MONEDA[m].corto }))}
-        />
+        <View style={styles.bloque}>
+          <Text variant="labelLarge">{meDeben ? '¿Qué le prestaste?' : '¿Qué te prestaron?'}</Text>
+          <SegmentedButtons
+            value={moneda}
+            onValueChange={(v) => cambiarMoneda(v as Moneda)}
+            buttons={MONEDAS.map((m) => ({ value: m, label: NOMBRE_CORTO[m] }))}
+          />
+          <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+            {moneda === 'BS'
+              ? `Se devuelve en bolívares, pero lo que ${meDeben ? 'te deben' : 'debes'} sube con el dólar: si ${meDeben ? 'prestaste' : 'te prestaron'} Bs. 5.000 y el dólar sube, hoy ${meDeben ? 'te deben' : 'debes'} más bolívares.`
+              : `Se devuelve lo mismo en ${INFO_MONEDA[moneda].nombre.toLowerCase()}.`}
+          </Text>
+        </View>
         <View>
           <TextInput
             label="Monto"
@@ -203,34 +211,21 @@ export function FormularioDeuda({ id }: { id?: number }) {
 
         {moneda === 'BS' && (
           <View style={styles.bloque}>
-            <View style={styles.filaSwitch}>
-              <View style={styles.flex}>
-                <Text variant="labelLarge">Llevar la cuenta en dólares</Text>
-                <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-                  Así, al pagarte, sabrás cuántos bolívares son a la tasa del día.
-                </Text>
-              </View>
-              <Switch value={indexada} onValueChange={setIndexada} />
-            </View>
-            {indexada && (
-              <>
-                <TextInput
-                  label="Tasa a la que lo valoras (Bs. por USD)"
-                  value={tasaTexto}
-                  onChangeText={setTasaTexto}
-                  keyboardType="decimal-pad"
-                  mode="outlined"
-                />
-                <SugerenciasTasa
-                  de="BS"
-                  a="USD"
-                  billeteras={billeteras.filter((b) => b.id === billeteraId)}
-                  onElegir={setTasaTexto}
-                />
-                {enDolares !== null && (
-                  <HelperText type="info">{`${meDeben ? 'Te debe' : 'Debes'} ${formatearMonto(enDolares, 'USD')}`}</HelperText>
-                )}
-              </>
+            <TextInput
+              label="¿A cuánto estaba el dólar ese día? (Bs.)"
+              value={tasaTexto}
+              onChangeText={setTasaTexto}
+              keyboardType="decimal-pad"
+              mode="outlined"
+            />
+            <SugerenciasTasa
+              de="BS"
+              a="USD"
+              billeteras={billeteras.filter((b) => b.id === billeteraId)}
+              onElegir={setTasaTexto}
+            />
+            {enDolares !== null && (
+              <HelperText type="info">{`Eso era ${formatearMonto(enDolares, 'USD')}. Al pagar${meDeben ? 'te' : ''}, se calcula cuántos bolívares son a la tasa de ese día.`}</HelperText>
             )}
           </View>
         )}
