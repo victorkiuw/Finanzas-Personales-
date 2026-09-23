@@ -159,3 +159,12 @@ export function cambioDe(tasas: Tasas, referencia: ParDolar): Cambio {
   const dolar = tasas[referencia]?.tasa ?? null;
   return { dolar, euro: euroSegun(dolar, tasas.BCV?.tasa ?? null, tasas.EURO?.tasa ?? null) };
 }
+
+/** Tasa de un día ("AAAA-MM-DD"): la de ese día o, si no hubo cotización (fin de semana), la anterior. */
+export async function tasaDelDia(db: BaseDatos, par: Par, dia: string): Promise<number | null> {
+  const f = await db.getFirstAsync<{ tasa: number }>(
+    `SELECT tasa FROM historial_tasas WHERE par = ? AND dia <= ? ORDER BY dia DESC LIMIT 1`,
+    [par, dia],
+  );
+  return f?.tasa ?? null;
+}

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { guardarPreferencia, leerPreferencia } from '../src/db/preferencias';
-import { actualizarTasasDesdeApi, cambioDe, euroSegun, guardarTasa, obtenerTasas, tasasVencidas } from '../src/db/tasas';
+import { actualizarTasasDesdeApi, cambioDe, guardarHistorial, tasaDelDia, euroSegun, guardarTasa, obtenerTasas, tasasVencidas } from '../src/db/tasas';
 import { consultarTasas, ErrorTasas, parsearRespuesta, URL_EUROS, URL_TASAS } from '../src/lib/api-tasas';
 import { calcularTasa, recibidoConTasa, unidadTasa } from '../src/lib/tasa';
 import { brecha, convertir, totalConsolidado } from '../src/lib/conversion';
@@ -164,4 +164,17 @@ test('euro: tasa según la referencia y convención de tasas con euros', () => {
   assert.equal(unidadTasa('EUR', 'BS'), 'Bs. por €');
   // Entre USD y USDT sigue siendo destino por origen.
   assert.equal(calcularTasa('USD', 'USDT', 10000, 9950), 0.995);
+});
+
+test('tasa de un día: la de ese día o la última anterior (fines de semana)', async () => {
+  const db = await crearBdMemoria();
+  await guardarHistorial(db, [
+    { par: 'BCV', dia: '2026-09-11', tasa: 840 },
+    { par: 'BCV', dia: '2026-09-14', tasa: 845 },
+    { par: 'PARALELO', dia: '2026-09-13', tasa: 940 },
+  ]);
+  assert.equal(await tasaDelDia(db, 'BCV', '2026-09-14'), 845);
+  assert.equal(await tasaDelDia(db, 'BCV', '2026-09-13'), 840); // domingo: la del viernes
+  assert.equal(await tasaDelDia(db, 'PARALELO', '2026-09-15'), 940);
+  assert.equal(await tasaDelDia(db, 'BCV', '2026-01-01'), null);
 });

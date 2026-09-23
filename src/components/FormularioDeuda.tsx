@@ -24,11 +24,13 @@ import {
   totalEnUnidad,
   type TipoDeuda,
 } from '../db/deudas';
-import { fechaSimpleLegible, formatearFechaCorta } from '../lib/fechas';
+import { tasaDelDia } from '../db/tasas';
+import { NOMBRE_PAR, PARES, type ParDolar } from '../lib/api-tasas';
+import { claveDia, fechaSimpleLegible, formatearFechaCorta } from '../lib/fechas';
 import { centimosATexto, formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../lib/moneda';
-import { parsearTasa, tasaATexto } from '../lib/tasa';
+import { formatearTasa, parsearTasa, tasaATexto } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
-import { SugerenciasTasa } from './SugerenciasTasa';
+import { useTasas } from './TasasProvider';
 
 const NOMBRE_CORTO: Record<Moneda, string> = { BS: 'Bolívares', USD: 'Dólares', USDT: 'USDT', EUR: 'Euros' };
 
@@ -51,6 +53,10 @@ export function FormularioDeuda({ id }: { id?: number }) {
   const [moneda, setMoneda] = useState<Moneda>('BS');
   const [montoTexto, setMontoTexto] = useState('');
   const [tasaTexto, setTasaTexto] = useState('');
+  // La tasa se llena sola con la del día del préstamo hasta que el usuario la escribe o elige.
+  const [tasaElegida, setTasaElegida] = useState(false);
+  const [tasasDelDia, setTasasDelDia] = useState<Partial<Record<ParDolar, number>>>({});
+  const { referencia, versionHistorial } = useTasas();
   const [fecha, setFecha] = useState(() => new Date());
   const [fechaLimite, setFechaLimite] = useState<string | null>(null);
   const [nota, setNota] = useState('');
@@ -73,6 +79,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
         setMoneda(d.moneda);
         setMontoTexto(centimosATexto(d.monto));
         setTasaTexto(d.tasa_referencia ? tasaATexto(d.tasa_referencia) : '');
+        setTasaElegida(d.tasa_referencia !== null);
         setBilleteraId(await billeteraDeDeuda(db, id));
         setTienePagos(d.pagado > 0);
         setFecha(new Date(d.fecha));
@@ -82,6 +89,25 @@ export function FormularioDeuda({ id }: { id?: number }) {
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
   }, [db, id]);
+
+  // Tasas BCV y USDT del día del préstamo (del historial); la de la referencia elegida se pone sola.
+  const dia = claveDia(fecha.toISOString());
+  useEffect(() => {
+    if (moneda !== 'BS' || cargando) return;
+    let vigente = true;
+    Promise.all(PARES.map((p) => tasaDelDia(db, p, dia)))
+      .then(([bcv, usdt]) => {
+        if (!vigente) return;
+        const delDia = { BCV: bcv ?? undefined, PARALELO: usdt ?? undefined };
+        setTasasDelDia(delDia);
+        const sugerida = delDia[referencia];
+        if (!tasaElegida && sugerida) setTasaTexto(tasaATexto(sugerida));
+      })
+      .catch(() => {});
+    return () => {
+      vigente = false;
+    };
+  }, [db, dia, moneda, referencia, cargando, tasaElegida, versionHistorial]);
 
   const monto = parsearMonto(montoTexto);
   const tasa = parsearTasa(tasaTexto);
@@ -110,6 +136,8 @@ export function FormularioDeuda({ id }: { id?: number }) {
           const nueva = new Date(fecha);
           nueva.setFullYear(elegida.getFullYear(), elegida.getMonth(), elegida.getDate());
           setFecha(nueva);
+          // Otra fecha: se vuelve a poner la tasa de ese día.
+          setTasaElegida(false);
         }
       },
     });
@@ -209,21 +237,42 @@ export function FormularioDeuda({ id }: { id?: number }) {
           {monto === null && montoTexto.trim() !== '' && <HelperText type="error">Número no válido</HelperText>}
         </View>
 
+        <Button mode="outlined" icon="calendar" onPress={() => elegirFecha('prestamo')}>
+          {`${meDeben ? 'Le prestaste' : 'Te prestó'} el ${formatearFechaCorta(fecha)}`}
+        </Button>
+
         {moneda === 'BS' && (
           <View style={styles.bloque}>
             <TextInput
               label="¿A cuánto estaba el dólar ese día? (Bs.)"
               value={tasaTexto}
-              onChangeText={setTasaTexto}
+              onChangeText={(t) => {
+                setTasaTexto(t);
+                setTasaElegida(true);
+              }}
               keyboardType="decimal-pad"
               mode="outlined"
             />
-            <SugerenciasTasa
-              de="BS"
-              a="USD"
-              billeteras={billeteras.filter((b) => b.id === billeteraId)}
-              onElegir={setTasaTexto}
-            />
+            <View style={styles.chips}>
+              {PARES.filter((p) => tasasDelDia[p]).map((p) => (
+                <Chip
+                  key={p}
+                  compact
+                  icon="calendar-check"
+                  selected={parsearTasa(tasaTexto) === Number(tasaATexto(tasasDelDia[p]!).replace(',', '.'))}
+                  showSelectedCheck={false}
+                  onPress={() => {
+                    setTasaTexto(tasaATexto(tasasDelDia[p]!));
+                    setTasaElegida(true);
+                  }}
+                >
+                  {`${NOMBRE_PAR[p]} ${formatearTasa(tasasDelDia[p]!)}`}
+                </Chip>
+              ))}
+            </View>
+            {!tasasDelDia.BCV && !tasasDelDia.PARALELO && (
+              <HelperText type="info">No hay tasas guardadas de ese día: escríbela a mano.</HelperText>
+            )}
             {enDolares !== null && (
               <HelperText type="info">{`Eso era ${formatearMonto(enDolares, 'USD')}. Al pagar${meDeben ? 'te' : ''}, se calcula cuántos bolívares son a la tasa de ese día.`}</HelperText>
             )}
@@ -253,10 +302,6 @@ export function FormularioDeuda({ id }: { id?: number }) {
           )}
         </View>
 
-        <Button mode="outlined" icon="calendar" onPress={() => elegirFecha('prestamo')}>
-          {`Fecha del préstamo: ${formatearFechaCorta(fecha)}`}
-        </Button>
-
         <View style={styles.filaSwitch}>
           <Button mode="outlined" icon="calendar-clock" onPress={() => elegirFecha('limite')} style={styles.flex}>
             {fechaLimite ? `Pagar antes del ${fechaSimpleLegible(fechaLimite)}` : 'Fecha límite (opcional)'}
@@ -282,4 +327,5 @@ const styles = StyleSheet.create({
   bloque: { gap: 8 },
   filaSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   chipNinguna: { alignSelf: 'flex-start' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });
