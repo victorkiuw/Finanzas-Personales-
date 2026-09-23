@@ -28,13 +28,14 @@ interface Props {
   deuda: Deuda;
   tasas: Tasas;
   referencia: ParDolar;
-  /** Con la frase del préstamo original (pantalla de la deuda). */
+  /** Con la equivalencia en la otra tasa (pantalla de la deuda). */
   detalle?: boolean;
 }
 
 /**
- * Lo que se debe hoy, en palabras sencillas. Si se prestó en bolívares llevando
- * la cuenta en dólares, lo grande es cuántos bolívares hay que pagar hoy (con la
+ * La deuda contada como una historia: "Le prestaste Bs. 5.000 a Victoria el
+ * 15 sep. Hoy te debe: Bs. 5.595,56". Si se prestó en bolívares llevando la
+ * cuenta en dólares, lo grande es cuántos bolívares hay que pagar hoy (con la
  * tasa elegida en Inicio) y debajo su valor en dólares.
  */
 export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: Props) {
@@ -46,14 +47,21 @@ export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: P
   const otra = PARES.find((p) => p !== referencia)!;
   const pendienteOtra = alDia ? bolivaresHoy(d.pendiente, d, tasas, otra) : null;
 
+  const prestamo = meDeben
+    ? `Le prestaste ${formatearMonto(d.monto, d.moneda)} a ${d.persona} el ${formatearFechaCorta(new Date(d.fecha))}`
+    : `${d.persona} te prestó ${formatearMonto(d.monto, d.moneda)} el ${formatearFechaCorta(new Date(d.fecha))}`;
+
   let titulo: string;
-  if (d.cerrada || d.pendiente === 0) titulo = meDeben ? 'Ya te pagó todo' : 'Ya pagaste todo';
-  else if (alDia) titulo = meDeben ? 'Te debe hoy' : 'Debes hoy';
-  else titulo = meDeben ? 'Te debe' : 'Debes';
+  if (d.cerrada || d.pendiente === 0) titulo = meDeben ? 'Ya te pagó todo.' : 'Ya le pagaste todo.';
+  else titulo = meDeben ? 'Hoy te debe:' : 'Hoy le debes:';
 
   return (
     <View style={styles.resumen}>
-      <Text variant="labelLarge" style={suave}>
+      <Text variant="bodyMedium">
+        {prestamo}
+        {alDia ? ` (eso era ${formatearMonto(d.total, d.unidad)} ese día).` : '.'}
+      </Text>
+      <Text variant="labelLarge" style={[suave, styles.titulo]}>
         {titulo}
       </Text>
       {d.pendiente > 0 && !d.cerrada && (
@@ -81,16 +89,9 @@ export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: P
         <>
           <ProgressBar progress={d.total > 0 ? Math.min(d.pagado / d.total, 1) : 0} style={styles.barra} />
           <Text variant="bodySmall" style={suave}>
-            {`${meDeben ? 'Ya te pagó' : 'Ya pagaste'} ${formatearMonto(d.pagado, d.unidad)} de ${formatearMonto(d.total, d.unidad)}`}
+            {`${meDeben ? 'Ya te pagó' : 'Ya le pagaste'} ${formatearMonto(d.pagado, d.unidad)} de ${formatearMonto(d.total, d.unidad)}`}
           </Text>
         </>
-      )}
-
-      {detalle && (
-        <Text variant="bodyMedium" style={styles.origen}>
-          {`${meDeben ? 'Le prestaste' : 'Te prestó'} ${formatearMonto(d.monto, d.moneda)} el ${formatearFechaCorta(new Date(d.fecha))}`}
-          {alDia ? ` (eso era ${formatearMonto(d.total, d.unidad)} ese día).` : '.'}
-        </Text>
       )}
     </View>
   );
@@ -125,5 +126,5 @@ const styles = StyleSheet.create({
   resumen: { gap: 4 },
   cifra: { fontVariant: ['tabular-nums'], fontWeight: '700' },
   barra: { height: 6, borderRadius: 3, marginTop: 6 },
-  origen: { marginTop: 8 },
+  titulo: { marginTop: 6 },
 });
