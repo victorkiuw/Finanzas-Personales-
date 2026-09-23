@@ -54,6 +54,13 @@ const TIPOS: { value: TipoMovimiento; label: string; icon: string }[] = [
   { value: 'TRANSFERENCIA', label: 'Transferir', icon: 'swap-horizontal' },
 ];
 
+/** Color de cada tipo: gastos en rojo, ingresos en verde y transferencias en azul. */
+export const COLOR_TIPO: Record<TipoMovimiento, string> = {
+  GASTO: '#C62828',
+  INGRESO: '#2E7D32',
+  TRANSFERENCIA: '#1565C0',
+};
+
 export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInicial }: Props) {
   const db = useSQLiteContext();
   const tema = useTheme();
@@ -369,12 +376,19 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
         <SegmentedButtons
           value={tipo}
           onValueChange={(v) => cambiarTipo(v as TipoMovimiento)}
-          buttons={TIPOS.map((t) => ({ ...t, showSelectedCheck: false }))}
+          buttons={TIPOS.map((t) => ({
+            ...t,
+            showSelectedCheck: false,
+            checkedColor: '#FFFFFF',
+            uncheckedColor: COLOR_TIPO[t.value],
+            style: tipo === t.value ? { backgroundColor: COLOR_TIPO[t.value] } : undefined,
+          }))}
         />
 
         <View>
           <TextInput
             label={esTransferencia ? 'Monto enviado' : 'Monto'}
+            activeOutlineColor={COLOR_TIPO[tipo]}
             value={montoTexto}
             onChangeText={cambiarMonto}
             keyboardType="decimal-pad"
@@ -579,7 +593,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
 
         {error && <HelperText type="error">{error}</HelperText>}
 
-        <Button mode="contained" onPress={guardar} loading={guardando} disabled={guardando}>
+        <Button mode="contained" buttonColor={COLOR_TIPO[tipo]} textColor="#FFFFFF" onPress={guardar} loading={guardando} disabled={guardando}>
           Guardar
         </Button>
         {editando && (
