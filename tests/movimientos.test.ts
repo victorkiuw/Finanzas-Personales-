@@ -192,3 +192,20 @@ test('ultimaTasa: última tasa pactada entre dos monedas', async () => {
   assert.equal(await ultimaTasa(db, 'USD', 'USDT'), null);
   assert.equal(tasaConMargen(852.42, 2), 869.4684);
 });
+
+test('buscador: por nota, categoría, billetera y monto', async () => {
+  const { db, usd, bs, comida, salario } = await preparar();
+  await crearMovimiento(db, { tipo: 'GASTO', monto: 2550, fecha: ahora, billetera_origen_id: usd, categoria_id: comida.id, nota: 'Farmacia 50% off' });
+  await crearMovimiento(db, { tipo: 'INGRESO', monto: 100000, fecha: ahora, billetera_origen_id: bs, categoria_id: salario.id, nota: 'quincena' });
+  const buscar = async (texto: string) => (await listarMovimientos(db, { texto })).map((m) => m.monto);
+  assert.deepEqual(await buscar('farmacia'), [2550]);
+  assert.deepEqual(await buscar('QUINCENA'), [100000]);
+  assert.deepEqual(await buscar(comida.nombre.slice(0, 3)), [2550]);
+  assert.deepEqual(await buscar('Banco'), [100000]);
+  assert.deepEqual(await buscar('25,50'), [2550]);
+  assert.deepEqual(await buscar('1000'), [100000]);
+  // Los comodines de SQL se buscan literalmente.
+  assert.deepEqual(await buscar('50%'), [2550]);
+  assert.deepEqual(await buscar('_'), []);
+  assert.equal((await buscar('   ')).length, 2);
+});

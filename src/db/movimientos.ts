@@ -1,4 +1,4 @@
-import type { Moneda } from '../lib/moneda';
+import { parsearMonto, type Moneda } from '../lib/moneda';
 import { calcularTasa } from '../lib/tasa';
 import { ErrorValidacion } from './billeteras';
 import { categoriaComisiones } from './categorias';
@@ -76,6 +76,8 @@ export interface FiltroMovimientos {
   categoriaId?: number;
   metaId?: number;
   deudaId?: number;
+  /** Busca en nota, categoría, billeteras, meta, persona o por monto exacto. */
+  texto?: string;
   tipo?: TipoTransaccion;
   /** ISO inclusivo. */
   desde?: string;
@@ -280,6 +282,20 @@ export async function listarMovimientos(db: BaseDatos, f: FiltroMovimientos = {}
   if (f.deudaId !== undefined) {
     condiciones.push('t.deuda_id = ?');
     params.push(f.deudaId);
+  }
+  const texto = f.texto?.trim();
+  if (texto) {
+    const like = `%${texto.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const campos = ['t.nota', 'c.nombre', 'o.nombre', 'd.nombre', 'm.nombre', 'dd.persona'];
+    const partes = campos.map((c) => `${c} LIKE ? ESCAPE '\\'`);
+    params.push(...campos.map(() => like));
+    // Si lo escrito es un número, también busca ese monto exacto (en origen o destino).
+    const monto = /\d/.test(texto) ? parsearMonto(texto) : null;
+    if (monto !== null && monto > 0) {
+      partes.push('t.monto = ?', 't.monto_destino = ?');
+      params.push(monto, monto);
+    }
+    condiciones.push(`(${partes.join(' OR ')})`);
   }
   if (f.tipo !== undefined) {
     condiciones.push('t.tipo = ?');

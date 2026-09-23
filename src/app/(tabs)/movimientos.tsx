@@ -1,9 +1,9 @@
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { FAB } from 'react-native-paper';
+import { FAB, Searchbar } from 'react-native-paper';
 
 import { ListaMovimientos } from '../../components/ListaMovimientos';
 import { MenuFiltro } from '../../components/MenuFiltro';
@@ -55,6 +55,13 @@ export default function PantallaMovimientos() {
   const [billeteraId, setBilleteraId] = useState<number | undefined>();
   const [tipo, setTipo] = useState<TipoTransaccion | undefined>();
   const [categoriaId, setCategoriaId] = useState<number | undefined>();
+  const [busqueda, setBusqueda] = useState('');
+  // Se espera a que se deje de escribir para no consultar en cada tecla.
+  const [texto, setTexto] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setTexto(busqueda.trim()), 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
 
   useFocusEffect(
     useCallback(() => {
@@ -146,9 +153,16 @@ export default function PantallaMovimientos() {
 
   return (
     <View style={styles.flex}>
+      <Searchbar
+        placeholder="Buscar nota, categoría, persona o monto"
+        value={busqueda}
+        onChangeText={setBusqueda}
+        style={styles.buscador}
+        inputStyle={styles.textoBuscador}
+      />
       {filtros}
       <ListaMovimientos
-        filtro={{ billeteraId, tipo, categoriaId, desde: rango?.desde, hasta: rango?.hasta }}
+        filtro={{ billeteraId, tipo, categoriaId, desde: rango?.desde, hasta: rango?.hasta, texto: texto || undefined }}
         textoVacio={
           billeteras.length === 0
             ? 'Crea una billetera para empezar a registrar movimientos.'
@@ -165,6 +179,8 @@ export default function PantallaMovimientos() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   barraFiltros: { flexGrow: 0 },
+  buscador: { marginHorizontal: 16, marginTop: 8 },
+  textoBuscador: { minHeight: 0 },
   filtros: { gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
   fab: { position: 'absolute', right: 16, bottom: 16 },
 });
