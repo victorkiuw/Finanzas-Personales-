@@ -42,3 +42,14 @@ test('interpreta gastos, ingresos, billetera y categoría', () => {
   assert.equal(recarga.categoriaId, 12);
   assert.equal(interpretarDictado('cambié 20 dólares a mercantil', billeteras, categorias).tipo, 'TRANSFERENCIA');
 });
+
+test('avisos del banco', async () => {
+  const { interpretarAviso } = await import('../src/lib/avisosBanco');
+  const r = interpretarAviso({ app: 'Mercantil', titulo: 'Pago Móvil', texto: 'Recibiste un Pago Móvil por Bs. 1.500,00 de 0414-XXX' }, billeteras);
+  assert.deepEqual(r && [r.tipo, r.monto, r.moneda, r.billeteraId], ['INGRESO', 150000, 'BS', 2]);
+  const g = interpretarAviso({ app: 'Banca Amiga', titulo: 'Consumo', texto: 'Realizaste una compra por Bs 350,00' }, billeteras);
+  assert.deepEqual(g && [g.tipo, g.monto, g.billeteraId], ['GASTO', 35000, 4]);
+  const u = interpretarAviso({ app: 'Binance', titulo: 'Depósito', texto: 'Depósito de 20 USDT acreditado' }, billeteras);
+  assert.deepEqual(u && [u.tipo, u.monto, u.moneda, u.billeteraId], ['INGRESO', 2000, 'USDT', 3]);
+  assert.equal(interpretarAviso({ app: 'X', titulo: 'Hola', texto: 'sin montos' }, billeteras), null);
+});

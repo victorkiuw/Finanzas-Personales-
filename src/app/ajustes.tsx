@@ -4,9 +4,10 @@ import { File } from 'expo-file-system';
 import { router, Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet } from 'react-native';
+import { Alert, AppState, ScrollView, StyleSheet } from 'react-native';
 import { ActivityIndicator, Divider, List, Switch, Text, useTheme } from 'react-native-paper';
 
+import { abrirAjustesNotificaciones, lectorDisponible, tienePermiso } from '../../modules/lector-notificaciones';
 import { autenticar, CLAVE_BLOQUEO, puedeBloquear } from '../components/Candado';
 import { useTasas } from '../components/TasasProvider';
 import { exportarMovimientosCsv } from '../db/exportar';
@@ -26,6 +27,15 @@ export default function PantallaAjustes() {
   // "HH:MM" si el recordatorio diario está activo.
   const [recordatorio, setRecordatorio] = useState<string | null>(null);
   const [bloqueo, setBloqueo] = useState(false);
+  const [leeAvisos, setLeeAvisos] = useState(() => tienePermiso());
+
+  // Al volver de los ajustes de Android se revisa si dio el permiso.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (e) => {
+      if (e === 'active') setLeeAvisos(tienePermiso());
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     leerPreferencia(db, CLAVE_RECORDATORIO).then(setRecordatorio).catch(() => {});
@@ -191,6 +201,26 @@ export default function PantallaAjustes() {
           onPress={() => router.navigate('/billeteras')}
         />
       </List.Section>
+      {lectorDisponible && (
+        <>
+          <Divider />
+          <List.Section>
+            <List.Subheader>Avisos del banco</List.Subheader>
+            <List.Item
+              title="Leer las notificaciones del banco"
+              description={
+                leeAvisos
+                  ? 'Activado: los pagos y cobros que te avise tu banco aparecerán en Inicio para registrarlos.'
+                  : 'Cuando te llegue un aviso de Pago Móvil o compra, la app te propone el movimiento ya lleno. Toca para darle acceso en Android.'
+              }
+              descriptionNumberOfLines={4}
+              left={(p) => <List.Icon {...p} icon="bell-ring-outline" />}
+              right={() => <Switch value={leeAvisos} onValueChange={() => abrirAjustesNotificaciones()} />}
+              onPress={() => abrirAjustesNotificaciones()}
+            />
+          </List.Section>
+        </>
+      )}
       <Divider />
       <List.Section>
         <List.Subheader>Seguridad</List.Subheader>
@@ -237,8 +267,10 @@ export default function PantallaAjustes() {
           <List.Item title={trabajando} left={() => <ActivityIndicator style={styles.cargando} />} />
         )}
         <Text variant="bodySmall" style={[styles.nota, { color: tema.colors.onSurfaceVariant }]}>
-          Tus datos viven solo en este teléfono. Exporta una copia de vez en cuando y guárdala fuera de él (por
-          ejemplo en Google Drive) para no perderlos si cambias o pierdes el teléfono.
+          Copia en Google Drive: si en tu teléfono está activada la copia de seguridad de Google (Ajustes de Android →
+          Google → Copia de seguridad), Android guarda los datos de esta app en tu cuenta una vez al día y los
+          restaura al instalarla de nuevo con la misma cuenta. Aun así, exporta una copia de vez en cuando y guárdala
+          fuera del teléfono.
         </Text>
       </List.Section>
     </ScrollView>

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
+import { AvisosDetectados } from '../../components/AvisosDetectados';
 import { CintaTasas } from '../../components/CintaTasas';
 import { DialogoDictado } from '../../components/DialogoDictado';
 import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
@@ -196,6 +197,7 @@ export default function PantallaInicio() {
       <ScrollView contentContainerStyle={styles.contenido}>
         <CintaTasas />
         <TarjetaPendientes pendientes={datos.pendientes} onCambio={() => cargar().catch(() => {})} />
+        <AvisosDetectados billeteras={datos.billeteras} />
         {(datos.sinExportar === null || datos.sinExportar >= DIAS_AVISO_EXPORTAR) && datos.recientes.length > 0 && (
           <Card mode="contained" style={[styles.aviso, { backgroundColor: tema.colors.tertiaryContainer }]} onPress={() => router.push('/ajustes')}>
             <Card.Title

@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Lee las notificaciones de los bancos (solo si el usuario lo activa en los ajustes de Android). -->
+    <service
+      android:name="expo.modules.lectornotificaciones.ServicioNotificaciones"
+      android:label="Finanzas: avisos del banco"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>
