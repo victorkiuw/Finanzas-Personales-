@@ -181,7 +181,8 @@ export default function PantallaInicio() {
         )}
         <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} />
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carrusel}>
+        {/* Billeteras en cuadrícula de dos columnas: se ven todas sin deslizar. */}
+        <View style={styles.carrusel}>
           {datos.billeteras.map((b) => {
             const oculta = !b.en_total && !visibles.has(b.id);
             return (
@@ -209,7 +210,7 @@ export default function PantallaInicio() {
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
 
         <View style={styles.seccion}>
           <View style={styles.selectorMes}>
@@ -362,8 +363,8 @@ const styles = StyleSheet.create({
   contenido: { paddingVertical: 8, paddingHorizontal: 0, gap: 12, paddingBottom: 96 },
   bienvenida: { flex: 1, padding: 24, gap: 16, justifyContent: 'center' },
   centrado: { textAlign: 'center' },
-  carrusel: { gap: 8, paddingHorizontal: 16 },
-  miniTarjeta: { width: 160, borderRadius: 12, padding: 12, gap: 6 },
+  carrusel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
+  miniTarjeta: { flexGrow: 1, flexBasis: '45%', borderRadius: 12, padding: 12, gap: 6 },
   filaMini: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cifra: { fontVariant: ['tabular-nums'] },
   negrita: { fontWeight: '700' },

@@ -2,7 +2,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { FAB, Searchbar } from 'react-native-paper';
 
 import { ListaMovimientos } from '../../components/ListaMovimientos';
@@ -102,12 +102,8 @@ export default function PantallaMovimientos() {
   const categoriasVisibles = categorias.filter((c) => !tipo || tipo === c.tipo);
 
   const filtros = (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.barraFiltros}
-      contentContainerStyle={styles.filtros}
-    >
+    // Filtros en varias líneas: se ven todos sin deslizar.
+    <View style={styles.filtros}>
       <MenuFiltro
         etiqueta="Periodo"
         icono="calendar"
@@ -148,7 +144,7 @@ export default function PantallaMovimientos() {
           opciones={categoriasVisibles.map((c) => ({ valor: c.id, etiqueta: c.nombre, icono: c.icono }))}
         />
       )}
-    </ScrollView>
+    </View>
   );
 
   return (
@@ -178,9 +174,8 @@ export default function PantallaMovimientos() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  barraFiltros: { flexGrow: 0 },
   buscador: { marginHorizontal: 16, marginTop: 8 },
   textoBuscador: { minHeight: 0 },
-  filtros: { gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  filtros: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
   fab: { position: 'absolute', right: 16, bottom: 16 },
 });
