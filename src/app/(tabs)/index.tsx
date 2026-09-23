@@ -31,6 +31,7 @@ import { listarHistorial } from '../../db/tasas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
 import { claveDia, nombreMes, rangoMes } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
+import { DIAS_AVISO_EXPORTAR, diasSinExportar } from '../../lib/respaldoAuto';
 
 const MESES_GRAFICO = 6;
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -49,6 +50,8 @@ interface Datos {
   categorias: Categoria[];
   pendientes: Recurrente[];
   patrimonio: PuntoPatrimonio[];
+  /** Días desde la última copia exportada fuera del teléfono (null = nunca). */
+  sinExportar: number | null;
 }
 
 export default function PantallaInicio() {
@@ -80,7 +83,8 @@ export default function PantallaInicio() {
     // Patrimonio al cierre de los últimos 12 meses hasta el mes que se está viendo.
     const meses12 = Array.from({ length: 12 }, (_, i) => claveMes(new Date(mes.getFullYear(), mes.getMonth() - 11 + i, 1)));
     const patrimonio = await patrimonioPorMes(db, meses12, new Conversor(historial, tasas[referencia]?.tasa ?? null), monedaBase);
-    setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias, pendientes, patrimonio });
+    const sinExportar = await diasSinExportar(db);
+    setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias, pendientes, patrimonio, sinExportar });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
   }, [db, mes, referencia, versionHistorial, monedaBase, tasas]);
 
@@ -133,6 +137,17 @@ export default function PantallaInicio() {
       <ScrollView contentContainerStyle={styles.contenido}>
         <CintaTasas />
         <TarjetaPendientes pendientes={datos.pendientes} onCambio={() => cargar().catch(() => {})} />
+        {(datos.sinExportar === null || datos.sinExportar >= DIAS_AVISO_EXPORTAR) && datos.recientes.length > 0 && (
+          <Card mode="contained" style={[styles.aviso, { backgroundColor: tema.colors.tertiaryContainer }]} onPress={() => router.push('/ajustes')}>
+            <Card.Title
+              title={datos.sinExportar === null ? 'Aún no guardas una copia fuera del teléfono' : `Hace ${datos.sinExportar} días que no guardas una copia`}
+              subtitle="Toca para exportarla a Drive o WhatsApp"
+              subtitleNumberOfLines={2}
+              titleNumberOfLines={2}
+              left={(p) => <Avatar.Icon {...p} icon="cloud-upload" />}
+            />
+          </Card>
+        )}
         <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carrusel}>
@@ -296,6 +311,7 @@ const styles = StyleSheet.create({
   cifra: { fontVariant: ['tabular-nums'] },
   negrita: { fontWeight: '700' },
   seccion: { paddingHorizontal: 16, gap: 12 },
+  aviso: { marginHorizontal: 16 },
   selectorMes: { flexDirection: 'row', alignItems: 'center' },
   mes: { flex: 1, textAlign: 'center', textTransform: 'capitalize' },
   kpis: { flexDirection: 'row', gap: 8 },

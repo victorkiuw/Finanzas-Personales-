@@ -1,18 +1,20 @@
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { router, Stack } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet } from 'react-native';
 import { ActivityIndicator, Divider, List, Switch, Text, useTheme } from 'react-native-paper';
 
+import { autenticar, CLAVE_BLOQUEO, puedeBloquear } from '../components/Candado';
 import { useTasas } from '../components/TasasProvider';
+import { exportarMovimientosCsv } from '../db/exportar';
 import { exportarDatos, importarDatos, resumenRespaldo, validarRespaldo, type Respaldo } from '../db/respaldo';
 import { guardarPreferencia, leerPreferencia } from '../db/preferencias';
 import { claveDia } from '../lib/fechas';
 import { cancelarRecordatorioDiario, pedirPermiso, programarRecordatorioDiario } from '../lib/notificaciones';
+import { CLAVE_ULTIMA_EXPORTACION, compartirArchivo } from '../lib/respaldoAuto';
 
 const CLAVE_RECORDATORIO = 'recordatorio_hora';
 
@@ -23,9 +25,11 @@ export default function PantallaAjustes() {
   const [trabajando, setTrabajando] = useState<string | null>(null);
   // "HH:MM" si el recordatorio diario está activo.
   const [recordatorio, setRecordatorio] = useState<string | null>(null);
+  const [bloqueo, setBloqueo] = useState(false);
 
   useEffect(() => {
     leerPreferencia(db, CLAVE_RECORDATORIO).then(setRecordatorio).catch(() => {});
+    leerPreferencia(db, CLAVE_BLOQUEO).then((v) => setBloqueo(v === '1')).catch(() => {});
   }, [db]);
 
   const elegirHoraRecordatorio = async () => {
@@ -62,23 +66,45 @@ export default function PantallaAjustes() {
     setTrabajando('Preparando la copia…');
     try {
       const respaldo = await exportarDatos(db);
-      const archivo = new File(Paths.cache, `finanzas-respaldo-${claveDia(respaldo.exportado_en)}.json`);
-      if (archivo.exists) archivo.delete();
-      archivo.create();
-      archivo.write(JSON.stringify(respaldo));
-      if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('No disponible', 'Este teléfono no permite compartir archivos.');
-        return;
-      }
-      await Sharing.shareAsync(archivo.uri, {
-        mimeType: 'application/json',
-        dialogTitle: 'Guardar copia de seguridad',
-      });
+      await compartirArchivo(
+        `finanzas-respaldo-${claveDia(respaldo.exportado_en)}.json`,
+        JSON.stringify(respaldo),
+        'application/json',
+        'Guardar copia de seguridad',
+      );
+      await guardarPreferencia(db, CLAVE_ULTIMA_EXPORTACION, new Date().toISOString());
     } catch (e) {
       Alert.alert('No se pudo exportar', String(e));
     } finally {
       setTrabajando(null);
     }
+  };
+
+  const exportarCsv = async () => {
+    setTrabajando('Preparando el archivo…');
+    try {
+      const { csv, cantidad } = await exportarMovimientosCsv(db);
+      if (cantidad === 0) {
+        Alert.alert('Sin movimientos', 'Todavía no hay movimientos para exportar.');
+        return;
+      }
+      await compartirArchivo(`finanzas-movimientos-${claveDia(new Date().toISOString())}.csv`, csv, 'text/csv', 'Exportar movimientos');
+    } catch (e) {
+      Alert.alert('No se pudo exportar', String(e));
+    } finally {
+      setTrabajando(null);
+    }
+  };
+
+  const alternarBloqueo = async (activar: boolean) => {
+    if (activar && !(await puedeBloquear())) {
+      Alert.alert('Sin bloqueo en el teléfono', 'Configura primero una huella, PIN o patrón en los ajustes de Android.');
+      return;
+    }
+    // Se pide la huella también para desactivarlo, para que otro no pueda quitarlo.
+    if (!(await autenticar(activar ? 'Confirma para activar el bloqueo' : 'Confirma para quitar el bloqueo'))) return;
+    await guardarPreferencia(db, CLAVE_BLOQUEO, activar ? '1' : '0');
+    setBloqueo(activar);
   };
 
   const restaurar = async (respaldo: Respaldo) => {
@@ -167,7 +193,18 @@ export default function PantallaAjustes() {
       </List.Section>
       <Divider />
       <List.Section>
-        <List.Subheader>Copia de seguridad</List.Subheader>
+        <List.Subheader>Seguridad</List.Subheader>
+        <List.Item
+          title="Bloquear con huella o PIN"
+          description="Pide desbloquear al abrir la app o al volver a ella tras 1 minuto"
+          left={(p) => <List.Icon {...p} icon="fingerprint" />}
+          right={() => <Switch value={bloqueo} onValueChange={alternarBloqueo} />}
+          onPress={() => alternarBloqueo(!bloqueo)}
+        />
+      </List.Section>
+      <Divider />
+      <List.Section>
+        <List.Subheader>Copia de seguridad y exportar</List.Subheader>
         <List.Item
           title="Exportar copia"
           description="Guarda todos tus datos en un archivo (Drive, WhatsApp, Archivos…)"
@@ -180,6 +217,20 @@ export default function PantallaAjustes() {
           description="Reemplaza los datos actuales por los del archivo"
           left={(p) => <List.Icon {...p} icon="cloud-download" />}
           onPress={importar}
+          disabled={trabajando !== null}
+        />
+        <List.Item
+          title="Copias automáticas en el teléfono"
+          description="Una por día, se guardan las últimas 7"
+          left={(p) => <List.Icon {...p} icon="history" />}
+          right={(p) => <List.Icon {...p} icon="chevron-right" />}
+          onPress={() => router.push('/copias')}
+        />
+        <List.Item
+          title="Exportar movimientos a Excel (CSV)"
+          description="Para abrir en Excel o Google Sheets"
+          left={(p) => <List.Icon {...p} icon="microsoft-excel" />}
+          onPress={exportarCsv}
           disabled={trabajando !== null}
         />
         {trabajando && (
