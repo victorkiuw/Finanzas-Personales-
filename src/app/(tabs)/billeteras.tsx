@@ -81,18 +81,25 @@ export default function PantallaBilleteras() {
           </View>
         }
         ListFooterComponent={
-          archivadas.length > 0 ? (
-            <List.Accordion
-              title={`Archivadas (${archivadas.length})`}
-              expanded={verArchivadas}
-              onPress={() => setVerArchivadas((v) => !v)}
-              style={{ backgroundColor: tema.colors.background }}
-            >
-              {archivadas.map((b) => (
-                <TarjetaBilletera key={b.id} billetera={b} onPress={() => abrir(b)} />
-              ))}
-            </List.Accordion>
-          ) : null
+          <>
+            {activas.length > 0 && (
+              <Button mode="outlined" icon="wallet-plus" style={styles.nueva} onPress={() => router.push('/billetera/nueva')}>
+                Agregar billetera
+              </Button>
+            )}
+            {archivadas.length > 0 && (
+              <List.Accordion
+                title={`Archivadas (${archivadas.length})`}
+                expanded={verArchivadas}
+                onPress={() => setVerArchivadas((v) => !v)}
+                style={{ backgroundColor: tema.colors.background }}
+              >
+                {archivadas.map((b) => (
+                  <TarjetaBilletera key={b.id} billetera={b} onPress={() => abrir(b)} />
+                ))}
+              </List.Accordion>
+            )}
+          </>
         }
       />
       {activas.length > 0 && (
@@ -112,4 +119,5 @@ const styles = StyleSheet.create({
   vacio: { padding: 24, gap: 12, marginTop: 32 },
   centrado: { textAlign: 'center' },
   fab: { position: 'absolute', right: 16 },
+  nueva: { marginHorizontal: 16, marginBottom: 12 },
 });

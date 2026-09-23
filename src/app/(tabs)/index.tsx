@@ -210,6 +210,17 @@ export default function PantallaInicio() {
               </Pressable>
             );
           })}
+          <Pressable
+            onPress={() => router.push('/billetera/nueva')}
+            style={[styles.miniTarjeta, styles.nuevaBilletera, { borderColor: tema.colors.outline }]}
+            accessibilityRole="button"
+            accessibilityLabel="Agregar billetera"
+          >
+            <View style={styles.filaMini}>
+              <Avatar.Icon size={24} icon="plus" />
+              <Text variant="labelLarge">Agregar billetera</Text>
+            </View>
+          </Pressable>
         </View>
 
         <View style={styles.seccion}>
@@ -366,6 +377,7 @@ const styles = StyleSheet.create({
   carrusel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
   miniTarjeta: { flexGrow: 1, flexBasis: '45%', borderRadius: 12, padding: 12, gap: 6 },
   filaMini: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  nuevaBilletera: { borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center' },
   cifra: { fontVariant: ['tabular-nums'] },
   negrita: { fontWeight: '700' },
   seccion: { paddingHorizontal: 16, gap: 12 },
