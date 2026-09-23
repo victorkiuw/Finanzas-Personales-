@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { CintaTasas } from '../../components/CintaTasas';
+import { DialogoDictado } from '../../components/DialogoDictado';
 import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
 import { GraficoLineas } from '../../components/GraficoLineas';
 import { BarrasCategorias, ColumnasMensuales, coloresSeries } from '../../components/graficos';
@@ -85,6 +86,7 @@ export default function PantallaInicio() {
   const [datos, setDatos] = useState<Datos | null>(null);
   // Escala de los gráficos: por día, por semana o por mes.
   const [escala, setEscala] = useState<Escala>('mes');
+  const [dictando, setDictando] = useState(false);
   // Los gráficos terminan hoy si se ve el mes actual; si no, el último día del mes elegido.
   const fin = useMemo(() => {
     const hoy = new Date();
@@ -403,7 +405,9 @@ export default function PantallaInicio() {
           </Card>
         </View>
       </ScrollView>
+      <FAB icon="microphone" size="small" accessibilityLabel="Dictar un movimiento" style={styles.fabVoz} onPress={() => setDictando(true)} />
       <FAB icon="plus" label="Movimiento" style={styles.fab} onPress={() => router.push('/movimiento/nuevo')} />
+      <DialogoDictado visible={dictando} onCerrar={() => setDictando(false)} />
     </View>
   );
 }
@@ -449,4 +453,5 @@ const styles = StyleSheet.create({
   muestra: { width: 10, height: 10, borderRadius: 2 },
   balance: { gap: 2 },
   fab: { position: 'absolute', right: 16, bottom: 16 },
+  fabVoz: { position: 'absolute', right: 20, bottom: 88 },
 });

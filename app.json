@@ -35,6 +35,13 @@
         }
       ],
       [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "La app usa el micrófono para que dictes tus movimientos.",
+          "speechRecognitionPermission": "La app convierte lo que dictas en un movimiento."
+        }
+      ],
+      [
         "react-native-android-widget",
         {
           "widgets": [
