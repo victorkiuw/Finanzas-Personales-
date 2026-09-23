@@ -190,3 +190,33 @@ test('deudas y pagos en euros', async () => {
     /euros/,
   );
 });
+
+test('dividir un gasto: tu parte es gasto y la de los demás, préstamos', async () => {
+  const { dividirGasto, partesIguales } = await import('../src/db/dividir');
+  const { listarCategorias } = await import('../src/db/categorias');
+  const { db, banco, saldo } = await preparar();
+  const [comida] = await listarCategorias(db, 'GASTO');
+  assert.deepEqual(partesIguales(1000, 2), { tuya: 334, cadaUno: 333 });
+  // Cena de Bs. 3.000 entre tres, pagada con el banco.
+  const r = await dividirGasto(
+    db,
+    { tipo: 'GASTO', monto: 300000, fecha: hoy, billetera_origen_id: banco, categoria_id: comida.id, nota: 'Cena' },
+    [
+      { persona: 'Victoria', monto: 100000 },
+      { persona: 'Ana', monto: 100000 },
+    ],
+    1000,
+  );
+  assert.equal(await saldo(banco), 5000000 - 300000);
+  const deudas = await listarDeudas(db);
+  assert.equal(deudas.length, 2);
+  assert.equal(r.deudas.length, 2);
+  // En bolívares se llevan en dólares a la tasa del día: $1 cada una.
+  assert.deepEqual(deudas.map((d) => [d.persona, d.total, d.unidad]).sort(), [['Ana', 100, 'USD'], ['Victoria', 100, 'USD']]);
+  const gasto = (await listarMovimientos(db, { tipo: 'GASTO' }))[0];
+  assert.equal(gasto.monto, 100000);
+  await assert.rejects(
+    dividirGasto(db, { tipo: 'GASTO', monto: 1000, fecha: hoy, billetera_origen_id: banco, categoria_id: comida.id }, [{ persona: 'X', monto: 1000 }], null),
+    /suman más/,
+  );
+});

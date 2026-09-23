@@ -260,3 +260,55 @@ export async function disponibleAl(
   }
   return puntos;
 }
+
+/**
+ * Cuánto valor en dólares perdieron tus bolívares en el periodo por la subida
+ * de la tasa: cada día, lo que tenías en Bs. vale menos dólares que el día
+ * anterior. Se cuentan todas las billeteras en bolívares. Devuelve céntimos de
+ * dólar (positivo = pérdida) y la subida de la tasa en el periodo (%).
+ */
+export async function perdidaPorDevaluacion(
+  db: BaseDatos,
+  historial: Historial,
+  desde: Date,
+  hasta: Date,
+): Promise<{ perdida: number; subida: number | null; saldoBs: number }> {
+  const inicial = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(balance_inicial) AS total FROM billeteras WHERE moneda = 'BS'`,
+    [],
+  );
+  const cambios = await db.getAllAsync<{ fecha: string; delta: number }>(
+    `SELECT t.fecha,
+       CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA') THEN t.monto ELSE -t.monto END AS delta
+     FROM transacciones t JOIN billeteras o ON o.id = t.billetera_origen_id WHERE o.moneda = 'BS'
+     UNION ALL
+     SELECT t.fecha, t.monto_destino FROM transacciones t JOIN billeteras d ON d.id = t.billetera_destino_id
+     WHERE t.tipo = 'TRANSFERENCIA' AND d.moneda = 'BS'
+     ORDER BY 1`,
+    [],
+  );
+  let saldo = inicial?.total ?? 0;
+  let k = 0;
+  const hastaIso = (d: Date) => d.toISOString();
+  // Saldo en Bs. al empezar el periodo.
+  while (k < cambios.length && cambios[k].fecha < hastaIso(desde)) saldo += cambios[k++].delta;
+
+  let perdida = 0;
+  const dia = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate());
+  let tasaPrevia = buscarTasa(historial, claveDia(new Date(dia.getTime() - 1).toISOString()));
+  const tasaInicio = tasaPrevia;
+  let tasaFin = tasaPrevia;
+  while (dia < hasta) {
+    const tasa = buscarTasa(historial, claveDia(dia.toISOString()));
+    if (tasa && tasaPrevia && saldo > 0) perdida += saldo / tasaPrevia - saldo / tasa;
+    if (tasa) {
+      tasaPrevia = tasa;
+      tasaFin = tasa;
+    }
+    const siguiente = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate() + 1);
+    while (k < cambios.length && cambios[k].fecha < hastaIso(siguiente)) saldo += cambios[k++].delta;
+    dia.setDate(dia.getDate() + 1);
+  }
+  const subida = tasaInicio && tasaFin ? (tasaFin / tasaInicio - 1) * 100 : null;
+  return { perdida: Math.round(perdida), subida, saldoBs: saldo };
+}

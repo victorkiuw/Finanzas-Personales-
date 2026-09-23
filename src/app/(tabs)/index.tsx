@@ -24,6 +24,7 @@ import {
   Conversor,
   disponibleAl,
   filasDeReporte,
+  perdidaPorDevaluacion,
   resumirPeriodo,
   type PuntoPatrimonio,
   totalesPorPeriodo,
@@ -64,6 +65,7 @@ interface Datos {
   categorias: Categoria[];
   pendientes: Recurrente[];
   plantillas: Plantilla[];
+  devaluacion: { perdida: number; subida: number | null };
   patrimonio: PuntoPatrimonio[];
   /** Días desde la última copia exportada fuera del teléfono (null = nunca). */
   sinExportar: number | null;
@@ -114,7 +116,12 @@ export default function PantallaInicio() {
     const conversor = new Conversor(historial, cambio.dolar, historialEuro, cambio.euro);
     const puntos = await disponibleAl(db, cortes.map((p) => p.hasta), conversor, monedaBase);
     const patrimonio = puntos.map((p, i) => ({ ...p, mes: cortes[i].larga }));
-    const [sinExportar, plantillas] = await Promise.all([diasSinExportar(db), listarPlantillas(db)]);
+    const [sinExportar, plantillas, devaluacion] = await Promise.all([
+      diasSinExportar(db),
+      listarPlantillas(db),
+      // Lo que perdieron los bolívares en el mes que se está viendo (hasta hoy si es el actual).
+      perdidaPorDevaluacion(db, historial, mes, new Date(Math.min(Date.now(), new Date(mes.getFullYear(), mes.getMonth() + 1, 1).getTime()))),
+    ]);
     // Mantiene al día el widget de la pantalla de inicio (si el usuario lo agregó).
     actualizarWidget(db).catch(() => {});
     setDatos({
@@ -128,6 +135,7 @@ export default function PantallaInicio() {
       categorias,
       pendientes,
       plantillas,
+      devaluacion,
       patrimonio,
       sinExportar,
     });
@@ -294,6 +302,21 @@ export default function PantallaInicio() {
             {`Montos en ${monedaBase === 'BS' ? 'bolívares' : 'dólares'}, cada movimiento convertido con la tasa ${NOMBRE_PAR[referencia]} de su día. No incluye transferencias ni metas.`}
             {resumen.incompleto ? ' Faltan tasas para convertir algunos movimientos en Bs.' : ''}
           </Text>
+
+          {datos.devaluacion.perdida >= 50 && (
+            <Card mode="outlined">
+              <Card.Title title="Devaluación del mes" left={(p) => <Avatar.Icon {...p} icon="trending-down" />} />
+              <Card.Content style={styles.balance}>
+                <Text variant="bodyMedium">
+                  {`Tus bolívares perdieron ≈ ${formatearMonto(datos.devaluacion.perdida, 'USD')} de valor`}
+                  {datos.devaluacion.subida !== null ? ` (la tasa ${NOMBRE_PAR[referencia]} subió ${datos.devaluacion.subida.toFixed(1).replace('.', ',')} %).` : '.'}
+                </Text>
+                <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                  Lo que tienes en dólares o USDT no pierde valor así: pasar los bolívares que no vas a usar pronto evita esa pérdida.
+                </Text>
+              </Card.Content>
+            </Card>
+          )}
 
           <Card mode="outlined">
             <Card.Title

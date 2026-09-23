@@ -77,3 +77,20 @@ test('alinearHistoriales rellena días sin cotización', async () => {
     [950, 951, 952],
   ]);
 });
+
+test('pérdida por devaluación de los bolívares', async () => {
+  const { perdidaPorDevaluacion } = await import('../src/db/reportes');
+  const db = await crearBdMemoria();
+  const base = { icono: 'wallet', color_hex: '#000000' };
+  await crearBilletera(db, { ...base, nombre: 'Banco', moneda: 'BS', balance_inicial: 1000000 });
+  // Bs. 10.000 todo el mes; la tasa pasa de 100 a 125: valían $100 y ahora $80.
+  const historial = [
+    { dia: '2026-08-31', tasa: 100 },
+    { dia: '2026-09-10', tasa: 110 },
+    { dia: '2026-09-20', tasa: 125 },
+  ];
+  const r = await perdidaPorDevaluacion(db, historial, new Date(2026, 8, 1), new Date(2026, 9, 1));
+  assert.equal(r.perdida, 2000);
+  assert.equal(Math.round(r.subida!), 25);
+  assert.equal(r.saldoBs, 1000000);
+});
