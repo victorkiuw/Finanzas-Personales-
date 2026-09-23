@@ -145,6 +145,13 @@ export default function PantallaAjustes() {
           onPress={recordatorio ? elegirHoraRecordatorio : () => alternarRecordatorio(true)}
         />
         <List.Item
+          title="Alertas de tasa"
+          description="Si el paralelo sube mucho o la brecha con el BCV se dispara"
+          left={(p) => <List.Icon {...p} icon="bell-alert" />}
+          right={(p) => <List.Icon {...p} icon="chevron-right" />}
+          onPress={() => router.push('/alertas')}
+        />
+        <List.Item
           title="Presupuestos mensuales"
           description="Límite de gasto por categoría"
           left={(p) => <List.Icon {...p} icon="chart-donut" />}

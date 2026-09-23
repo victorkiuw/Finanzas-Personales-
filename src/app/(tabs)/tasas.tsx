@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Button,
   Card,
+  Chip,
   Dialog,
   Divider,
   HelperText,
@@ -13,16 +15,46 @@ import {
   useTheme,
 } from 'react-native-paper';
 
+import { GraficoLineas } from '../../components/GraficoLineas';
 import { useTasas } from '../../components/TasasProvider';
+import { alinearHistoriales, listarHistorial } from '../../db/tasas';
 import { NOMBRE_PAR, PARES, type Par } from '../../lib/api-tasas';
 import { brecha, convertir } from '../../lib/conversion';
-import { formatearFechaCorta, haceCuanto } from '../../lib/fechas';
+import { fechaSimpleLegible, formatearFechaCorta, haceCuanto } from '../../lib/fechas';
 import { formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../../lib/moneda';
 import { formatearTasa, parsearTasa, tasaATexto } from '../../lib/tasa';
 
+const RANGOS = [
+  { dias: 30, etiqueta: '30 días' },
+  { dias: 90, etiqueta: '3 meses' },
+  { dias: 365, etiqueta: '1 año' },
+];
+
+/** Colores de la paleta validada (contraste y daltonismo): BCV azul, paralelo naranja. */
+function coloresTasas(oscuro: boolean) {
+  return oscuro ? { BCV: '#3987e5', PARALELO: '#d95926' } : { BCV: '#2a78d6', PARALELO: '#eb6834' };
+}
+
+type Historial = { dia: string; tasa: number }[];
+
 export default function PantallaTasas() {
   const tema = useTheme();
-  const { tasas, actualizando, error, actualizar, guardarManual } = useTasas();
+  const db = useSQLiteContext();
+  const { tasas, actualizando, error, actualizar, guardarManual, versionHistorial } = useTasas();
+  const [rango, setRango] = useState(30);
+  const [historial, setHistorial] = useState<{ BCV: Historial; PARALELO: Historial } | null>(null);
+
+  useEffect(() => {
+    Promise.all([listarHistorial(db, 'BCV'), listarHistorial(db, 'PARALELO')])
+      .then(([bcv, paralelo]) => setHistorial({ BCV: bcv, PARALELO: paralelo }))
+      .catch(() => {});
+  }, [db, versionHistorial]);
+
+  const desde = new Date();
+  desde.setDate(desde.getDate() - rango);
+  const clavedesde = `${desde.getFullYear()}-${String(desde.getMonth() + 1).padStart(2, '0')}-${String(desde.getDate()).padStart(2, '0')}`;
+  const alineado = historial ? alinearHistoriales([historial.BCV, historial.PARALELO], clavedesde) : null;
+  const colores = coloresTasas(tema.dark);
   const [moneda, setMoneda] = useState<Moneda>('USD');
   const [montoTexto, setMontoTexto] = useState('1');
   const [editando, setEditando] = useState<Par | null>(null);
@@ -133,6 +165,28 @@ export default function PantallaTasas() {
             {`Brecha: el paralelo está ${brecha(bcv, paralelo).toFixed(1).replace('.', ',')}% sobre el BCV.`}
           </Text>
         )}
+        <Card mode="outlined">
+          <Card.Title title="Historial" subtitle="Desliza el dedo sobre el gráfico para ver cada día" />
+          <Card.Content style={styles.historial}>
+            <View style={styles.chips}>
+              {RANGOS.map((r) => (
+                <Chip key={r.dias} compact selected={rango === r.dias} showSelectedCheck={false} mode={rango === r.dias ? 'flat' : 'outlined'} onPress={() => setRango(r.dias)}>
+                  {r.etiqueta}
+                </Chip>
+              ))}
+            </View>
+            {alineado && (
+              <GraficoLineas
+                etiquetas={alineado.dias.map(fechaSimpleLegible)}
+                series={[
+                  { nombre: 'BCV', color: colores.BCV, valores: alineado.valores[0] },
+                  { nombre: 'Paralelo', color: colores.PARALELO, valores: alineado.valores[1] },
+                ]}
+                formatear={formatearTasa}
+              />
+            )}
+          </Card.Content>
+        </Card>
         <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
           Fuente: ve.dolarapi.com. Se actualizan solas cada 30 minutos cuando hay internet; toca una tasa para
           corregirla a mano.
@@ -174,4 +228,6 @@ const styles = StyleSheet.create({
   divisor: { marginVertical: 8 },
   filaTitulo: { flexDirection: 'row', alignItems: 'center' },
   tasa: { flexDirection: 'row', alignItems: 'center' },
+  historial: { gap: 12 },
+  chips: { flexDirection: 'row', gap: 8 },
 });

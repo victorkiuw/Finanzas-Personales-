@@ -12,6 +12,7 @@ import {
   type Tasas,
 } from '../db/tasas';
 import { ErrorTasas, type Par } from '../lib/api-tasas';
+import { revisarAlertasTasa } from '../lib/avisos';
 import { esMoneda, type Moneda } from '../lib/moneda';
 
 interface ContextoTasas {
@@ -60,6 +61,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
         setError(null);
         // El histórico diario (para reportes) se baja como mucho una vez al día; si falla no es grave.
         await sincronizarHistorico(db).catch(() => false);
+        await revisarAlertasTasa(db, nuevas).catch(() => {});
         setVersionHistorial((v) => v + 1);
       } catch (e) {
         setError(e instanceof ErrorTasas ? e.message : 'No se pudieron actualizar las tasas.');

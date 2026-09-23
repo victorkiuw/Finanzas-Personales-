@@ -6,6 +6,7 @@ import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, Text, useThem
 
 import { CintaTasas } from '../../components/CintaTasas';
 import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
+import { GraficoLineas } from '../../components/GraficoLineas';
 import { BarrasCategorias, ColumnasMensuales, coloresSeries } from '../../components/graficos';
 import { ItemMovimiento } from '../../components/ItemMovimiento';
 import { ResumenSaldo } from '../../components/ResumenSaldo';
@@ -20,7 +21,9 @@ import { listarMovimientos, type Movimiento } from '../../db/movimientos';
 import {
   Conversor,
   filasDeReporte,
+  patrimonioPorMes,
   resumirPeriodo,
+  type PuntoPatrimonio,
   totalesPorMes,
   type FilaReporte,
 } from '../../db/reportes';
@@ -45,6 +48,7 @@ interface Datos {
   presupuestos: Presupuesto[];
   categorias: Categoria[];
   pendientes: Recurrente[];
+  patrimonio: PuntoPatrimonio[];
 }
 
 export default function PantallaInicio() {
@@ -73,9 +77,12 @@ export default function PantallaInicio() {
       listarPresupuestos(db),
       listarCategorias(db, 'GASTO', { incluirArchivadas: true }),
     ]);
-    setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias, pendientes });
+    // Patrimonio al cierre de los últimos 12 meses hasta el mes que se está viendo.
+    const meses12 = Array.from({ length: 12 }, (_, i) => claveMes(new Date(mes.getFullYear(), mes.getMonth() - 11 + i, 1)));
+    const patrimonio = await patrimonioPorMes(db, meses12, new Conversor(historial, tasas[referencia]?.tasa ?? null), monedaBase);
+    setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias, pendientes, patrimonio });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
-  }, [db, mes, referencia, versionHistorial]);
+  }, [db, mes, referencia, versionHistorial, monedaBase, tasas]);
 
   useFocusEffect(
     useCallback(() => {
@@ -217,6 +224,20 @@ export default function PantallaInicio() {
             <Card.Title title="Ingresos vs. gastos" subtitle="Últimos 6 meses · toca un mes para ver sus cifras" />
             <Card.Content>
               <ColumnasMensuales key={claveMes(mes) + monedaBase} meses={porMes} etiquetas={etiquetas} moneda={monedaBase} />
+            </Card.Content>
+          </Card>
+
+          <Card mode="outlined">
+            <Card.Title title="Evolución del patrimonio" subtitle="Al cierre de cada mes · desliza para ver cada uno" />
+            <Card.Content>
+              <GraficoLineas
+                etiquetas={datos.patrimonio.map((p) => {
+                  const [a, m] = p.mes.split('-').map(Number);
+                  return `${MESES_CORTOS[m - 1]} ${a}`;
+                })}
+                series={[{ nombre: 'Patrimonio', color: colores.ingresos, valores: datos.patrimonio.map((p) => (p.incompleto ? null : p.total)) }]}
+                formatear={(v) => formatearMonto(Math.round(v), monedaBase)}
+              />
             </Card.Content>
           </Card>
 

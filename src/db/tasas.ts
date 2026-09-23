@@ -109,3 +109,32 @@ export function tasasVencidas(tasas: Tasas, ahora = new Date()): boolean {
     return ahora.getTime() - Date.parse(t.consultada_en) > MINUTOS_VIGENCIA * 60_000;
   });
 }
+
+/** Última tasa guardada antes de `dia` ("AAAA-MM-DD"), para comparar con la de hoy. */
+export async function tasaAnterior(db: BaseDatos, par: Par, dia: string): Promise<number | null> {
+  const f = await db.getFirstAsync<{ tasa: number }>(
+    `SELECT tasa FROM historial_tasas WHERE par = ? AND dia < ? ORDER BY dia DESC LIMIT 1`,
+    [par, dia],
+  );
+  return f?.tasa ?? null;
+}
+
+/**
+ * Une dos historiales en una misma línea de días desde `desde` hasta el último
+ * dato, repitiendo el valor anterior los días sin cotización (fines de semana).
+ */
+export function alinearHistoriales(
+  series: { dia: string; tasa: number }[][],
+  desde: string,
+): { dias: string[]; valores: (number | null)[][] } {
+  const todosLosDias = [...new Set(series.flat().map((p) => p.dia))].filter((d) => d >= desde).sort();
+  const valores = series.map((serie) => {
+    const mapa = new Map(serie.map((p) => [p.dia, p.tasa]));
+    let ultimo: number | null = serie.filter((p) => p.dia < desde).at(-1)?.tasa ?? null;
+    return todosLosDias.map((d) => {
+      ultimo = mapa.get(d) ?? ultimo;
+      return ultimo;
+    });
+  });
+  return { dias: todosLosDias, valores };
+}

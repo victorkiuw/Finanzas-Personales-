@@ -143,3 +143,67 @@ export function totalesPorMes(
   }
   return meses.map((m) => porMes.get(m)!);
 }
+
+export interface PuntoPatrimonio {
+  /** "AAAA-MM". */
+  mes: string;
+  /** Patrimonio al cierre del mes (billeteras + metas), en la moneda base. */
+  total: number;
+  /** Faltó una tasa para convertir lo que había en Bs. */
+  incompleto: boolean;
+}
+
+/**
+ * Patrimonio al cierre de cada mes: saldos iniciales más todos los movimientos
+ * hasta esa fecha, por moneda, convertidos con la tasa del último día del mes.
+ * Las metas cuentan como parte del patrimonio (igual que en el resumen).
+ */
+export async function patrimonioPorMes(
+  db: BaseDatos,
+  meses: string[],
+  conversor: Conversor,
+  base: Moneda,
+): Promise<PuntoPatrimonio[]> {
+  const iniciales = await db.getAllAsync<{ moneda: Moneda; total: number }>(
+    `SELECT moneda, SUM(balance_inicial) AS total FROM billeteras GROUP BY moneda`,
+    [],
+  );
+  // Cada movimiento como cambios por moneda: lo que sale/entra de billeteras y metas.
+  const cambios = await db.getAllAsync<{ fecha: string; moneda: Moneda; delta: number }>(
+    `SELECT t.fecha, o.moneda,
+       CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA') THEN t.monto ELSE -t.monto END AS delta
+     FROM transacciones t JOIN billeteras o ON o.id = t.billetera_origen_id
+     UNION ALL
+     SELECT t.fecha, d.moneda, t.monto_destino
+     FROM transacciones t JOIN billeteras d ON d.id = t.billetera_destino_id WHERE t.tipo = 'TRANSFERENCIA'
+     UNION ALL
+     SELECT t.fecha, m.moneda, CASE WHEN t.tipo = 'APORTE_META' THEN t.monto_destino ELSE -t.monto_destino END
+     FROM transacciones t JOIN metas_ahorro m ON m.id = t.meta_id
+     ORDER BY 1`,
+    [],
+  );
+
+  const saldo: Partial<Record<Moneda, number>> = {};
+  for (const i of iniciales) saldo[i.moneda] = i.total;
+  const puntos: PuntoPatrimonio[] = [];
+  let k = 0;
+  for (const mes of meses) {
+    const [a, m] = mes.split('-').map(Number);
+    const finMes = new Date(a, m, 1); // primer instante del mes siguiente (local)
+    const limite = finMes.toISOString();
+    while (k < cambios.length && cambios[k].fecha < limite) {
+      const c = cambios[k++];
+      saldo[c.moneda] = (saldo[c.moneda] ?? 0) + c.delta;
+    }
+    const ultimoDia = new Date(finMes.getTime() - 1).toISOString();
+    let total = 0;
+    let incompleto = false;
+    for (const [moneda, monto] of Object.entries(saldo) as [Moneda, number][]) {
+      const v = conversor.aBase(monto, moneda, base, ultimoDia);
+      if (v === null) incompleto = true;
+      else total += v;
+    }
+    puntos.push({ mes, total, incompleto });
+  }
+  return puntos;
+}
