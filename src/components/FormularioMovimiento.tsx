@@ -16,6 +16,7 @@ import {
 } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
+import { crearPlantilla } from '../db/plantillas';
 import { listarCategorias, type Categoria } from '../db/categorias';
 import {
   actualizarMovimiento,
@@ -46,6 +47,10 @@ interface Props {
   id?: number;
   tipoInicial?: TipoMovimiento;
   billeteraInicial?: number;
+  /** Para llenar el formulario (movimientos rápidos, dictado por voz). */
+  montoInicial?: number;
+  categoriaInicial?: number;
+  notaInicial?: string;
 }
 
 const TIPOS: { value: TipoMovimiento; label: string; icon: string }[] = [
@@ -61,7 +66,14 @@ export const COLOR_TIPO: Record<TipoMovimiento, string> = {
   TRANSFERENCIA: '#1565C0',
 };
 
-export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInicial }: Props) {
+export function FormularioMovimiento({
+  id,
+  tipoInicial = 'GASTO',
+  billeteraInicial,
+  montoInicial,
+  categoriaInicial,
+  notaInicial,
+}: Props) {
   const db = useSQLiteContext();
   const tema = useTheme();
   const editando = id !== undefined;
@@ -106,6 +118,9 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
           activas.some((b) => b.id === bid),
         );
         setOrigenId(preferida ?? activas[0]?.id ?? null);
+        if (montoInicial) setMontoTexto(centimosATexto(montoInicial));
+        if (categoriaInicial) setCategoriaId(categoriaInicial);
+        if (notaInicial) setNota(notaInicial);
         setCargando(false);
         return;
       }
@@ -137,7 +152,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
       }
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
-  }, [db, id, billeteraInicial]);
+  }, [db, id, billeteraInicial, montoInicial, categoriaInicial, notaInicial]);
 
   // Al volver de crear una categoría desde aquí, aparece en la lista.
   useFocusEffect(
@@ -246,6 +261,21 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
   const comisionAuto = monto && monto > 0 ? calcularComision(monto, configComision) : 0;
   const aMano = aQuien === 'OTRA' && comisionTexto.trim() !== '';
   const comision = !comisionActiva ? 0 : aMano ? parsearMonto(comisionTexto) : comisionAuto;
+
+  /** Guarda billetera, categoría y monto como un botón de Inicio para registrarlo con un toque. */
+  const guardarComoRapido = async () => {
+    if (!origenId || !categoriaId || tipo === 'TRANSFERENCIA') {
+      setError('Elige la billetera y la categoría primero.');
+      return;
+    }
+    const nombre = nota.trim() || categorias.find((c) => c.id === categoriaId)?.nombre || 'Rápido';
+    try {
+      await crearPlantilla(db, { nombre: nombre.slice(0, 24), tipo, monto: monto && monto > 0 ? monto : null, billetera_id: origenId, categoria_id: categoriaId });
+      Alert.alert('Listo', `"${nombre.slice(0, 24)}" aparece en Inicio, en Movimientos rápidos. Déjalo presionado para borrarlo.`);
+    } catch (e) {
+      setError(e instanceof ErrorValidacion ? e.message : String(e));
+    }
+  };
 
   const guardar = async () => {
     if (!monto || monto <= 0) {
@@ -593,6 +623,11 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
 
         {error && <HelperText type="error">{error}</HelperText>}
 
+        {!editando && tipo !== 'TRANSFERENCIA' && (
+          <Button mode="text" icon="lightning-bolt" onPress={guardarComoRapido}>
+            Guardar como movimiento rápido
+          </Button>
+        )}
         <Button mode="contained" buttonColor={COLOR_TIPO[tipo]} textColor="#FFFFFF" onPress={guardar} loading={guardando} disabled={guardando}>
           Guardar
         </Button>

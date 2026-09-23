@@ -54,3 +54,24 @@ test('presupuestos: guardar, estado del mes y conversión con la tasa del día',
   await eliminarCategoria(db, extra.id);
   assert.deepEqual((await listarPresupuestos(db)).map((p) => p.categoria_id), [comida.id]);
 });
+
+test('movimientos rápidos (plantillas)', async () => {
+  const { crearBdMemoria } = await import('./bd-memoria');
+  const { crearBilletera, obtenerBilletera } = await import('../src/db/billeteras');
+  const { listarCategorias } = await import('../src/db/categorias');
+  const { crearPlantilla, eliminarPlantilla, listarPlantillas, usarPlantilla } = await import('../src/db/plantillas');
+  const db = await crearBdMemoria();
+  const banco = await crearBilletera(db, { icono: 'x', color_hex: '#000', nombre: 'Mercantil', moneda: 'BS', balance_inicial: 100000 });
+  const [transporte] = (await listarCategorias(db, 'GASTO')).filter((c) => c.nombre === 'Transporte');
+  const [salario] = await listarCategorias(db, 'INGRESO');
+  await assert.rejects(crearPlantilla(db, { nombre: 'Pasaje', tipo: 'GASTO', monto: 2000, billetera_id: banco, categoria_id: salario.id }), /categoría/);
+  await crearPlantilla(db, { nombre: 'Pasaje', tipo: 'GASTO', monto: 2000, billetera_id: banco, categoria_id: transporte.id });
+  const [p] = await listarPlantillas(db);
+  assert.equal(p.icono, transporte.icono);
+  assert.equal(p.billetera_nombre, 'Mercantil');
+  await usarPlantilla(db, p);
+  await usarPlantilla(db, p, 2500);
+  assert.equal((await obtenerBilletera(db, banco))!.saldo, 100000 - 4500);
+  await eliminarPlantilla(db, p.id);
+  assert.deepEqual(await listarPlantillas(db), []);
+});

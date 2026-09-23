@@ -9,12 +9,14 @@ import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
 import { GraficoLineas } from '../../components/GraficoLineas';
 import { BarrasCategorias, ColumnasMensuales, coloresSeries } from '../../components/graficos';
 import { ItemMovimiento } from '../../components/ItemMovimiento';
+import { MovimientosRapidos } from '../../components/MovimientosRapidos';
 import { ResumenSaldo } from '../../components/ResumenSaldo';
 import { TarjetaPendientes } from '../../components/TarjetaPendientes';
 import { useTasas } from '../../components/TasasProvider';
 import { listarBilleteras, type Billetera } from '../../db/billeteras';
 import { listarCategorias, type Categoria } from '../../db/categorias';
 import { listarMetas, type Meta } from '../../db/metas';
+import { listarPlantillas, type Plantilla } from '../../db/plantillas';
 import { estadoPresupuestos, listarPresupuestos, type Presupuesto } from '../../db/presupuestos';
 import { procesarRecurrentes, type Recurrente } from '../../db/recurrentes';
 import { listarMovimientos, type Movimiento } from '../../db/movimientos';
@@ -61,6 +63,7 @@ interface Datos {
   presupuestos: Presupuesto[];
   categorias: Categoria[];
   pendientes: Recurrente[];
+  plantillas: Plantilla[];
   patrimonio: PuntoPatrimonio[];
   /** Días desde la última copia exportada fuera del teléfono (null = nunca). */
   sinExportar: number | null;
@@ -111,10 +114,23 @@ export default function PantallaInicio() {
     const conversor = new Conversor(historial, cambio.dolar, historialEuro, cambio.euro);
     const puntos = await disponibleAl(db, cortes.map((p) => p.hasta), conversor, monedaBase);
     const patrimonio = puntos.map((p, i) => ({ ...p, mes: cortes[i].larga }));
-    const sinExportar = await diasSinExportar(db);
+    const [sinExportar, plantillas] = await Promise.all([diasSinExportar(db), listarPlantillas(db)]);
     // Mantiene al día el widget de la pantalla de inicio (si el usuario lo agregó).
     actualizarWidget(db).catch(() => {});
-    setDatos({ billeteras, metas, recientes, filas, historial, historialEuro, presupuestos, categorias, pendientes, patrimonio, sinExportar });
+    setDatos({
+      billeteras,
+      metas,
+      recientes,
+      filas,
+      historial,
+      historialEuro,
+      presupuestos,
+      categorias,
+      pendientes,
+      plantillas,
+      patrimonio,
+      sinExportar,
+    });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
   }, [db, mes, fin, escala, referencia, versionHistorial, monedaBase, cambio.dolar, cambio.euro]);
 
@@ -240,6 +256,8 @@ export default function PantallaInicio() {
             </View>
           </Pressable>
         </View>
+
+        <MovimientosRapidos plantillas={datos.plantillas} onCambio={() => cargar().catch(() => {})} />
 
         <View style={styles.seccion}>
           <View style={styles.selectorMes}>
