@@ -1,7 +1,7 @@
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Linking, StyleSheet, View } from 'react-native';
 import { Button, Card, Text, useTheme } from 'react-native-paper';
 
 import { DialogoPagoDeuda } from '../../components/DialogoPagoDeuda';
@@ -9,7 +9,11 @@ import { ListaMovimientos } from '../../components/ListaMovimientos';
 import { ResumenDeuda, vencida } from '../../components/TarjetaDeuda';
 import { useTasas } from '../../components/TasasProvider';
 import { eliminarDeuda, establecerDeudaCerrada, obtenerDeuda, type Deuda } from '../../db/deudas';
+import { cambioDe } from '../../db/tasas';
+import { NOMBRE_PAR } from '../../lib/api-tasas';
+import { convertir } from '../../lib/conversion';
 import { fechaSimpleLegible } from '../../lib/fechas';
+import { formatearMonto } from '../../lib/moneda';
 
 export default function DetalleDeuda() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -56,6 +60,19 @@ export default function DetalleDeuda() {
 
   const meDeben = deuda?.tipo === 'ME_DEBEN';
 
+  /** Abre WhatsApp con un mensaje amable y el monto de hoy, para elegir a quién enviarlo. */
+  const recordarPorWhatsApp = () => {
+    if (!deuda) return;
+    const bs = deuda.moneda === 'BS' && deuda.unidad !== 'BS' ? convertir(deuda.pendiente, deuda.unidad, 'BS', cambioDe(tasas, referencia)) : null;
+    const monto = bs !== null
+      ? `${formatearMonto(bs, 'BS')} (${formatearMonto(deuda.pendiente, deuda.unidad)} a tasa ${NOMBRE_PAR[referencia]} de hoy)`
+      : formatearMonto(deuda.pendiente, deuda.unidad);
+    const texto = `Hola ${deuda.persona}, te escribo para recordarte lo que quedó pendiente: hoy son ${monto}. ¡Gracias!`;
+    Linking.openURL(`https://wa.me/?text=${encodeURIComponent(texto)}`).catch(() =>
+      Alert.alert('WhatsApp', 'No se pudo abrir WhatsApp.'),
+    );
+  };
+
   return (
     <>
       <Stack.Screen
@@ -83,6 +100,11 @@ export default function DetalleDeuda() {
                     <Text variant="labelLarge" style={{ color: tema.colors.primary }}>
                       ✓ Saldada
                     </Text>
+                  )}
+                  {meDeben && !deuda.cerrada && deuda.pendiente > 0 && (
+                    <Button mode="outlined" icon="whatsapp" onPress={recordarPorWhatsApp} style={styles.izquierda}>
+                      Recordarle por WhatsApp
+                    </Button>
                   )}
                   {/* Acciones a la vista, sin menú escondido. */}
                   <View style={styles.acciones}>
@@ -127,6 +149,7 @@ export default function DetalleDeuda() {
 const styles = StyleSheet.create({
   tarjeta: { margin: 16, marginBottom: 8 },
   contenido: { gap: 8 },
+  izquierda: { alignSelf: 'flex-start' },
   acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   boton: { marginHorizontal: 16, marginBottom: 8 },
 });

@@ -9,7 +9,7 @@ import { Candado } from '../components/Candado';
 import { ModoDiscretoProvider } from '../components/ModoDiscreto';
 import { TasasProvider } from '../components/TasasProvider';
 import { migrar, NOMBRE_BD } from '../db/esquema';
-import { actualizarAvisosRecurrentes } from '../lib/avisos';
+import { actualizarAvisosRecurrentes, actualizarAvisosVencimientos, enviarResumenMensual } from '../lib/avisos';
 import { configurarNotificaciones } from '../lib/notificaciones';
 import { hacerCopiaAutomatica } from '../lib/respaldoAuto';
 import { temaClaro, temaOscuro } from '../lib/tema';
@@ -19,7 +19,11 @@ function Arranque() {
   const db = useSQLiteContext();
   useEffect(() => {
     configurarNotificaciones()
-      .then(() => actualizarAvisosRecurrentes(db))
+      .then(async () => {
+        await actualizarAvisosRecurrentes(db);
+        await actualizarAvisosVencimientos(db);
+        await enviarResumenMensual(db);
+      })
       .catch(() => {});
     // Copia de seguridad diaria dentro del teléfono.
     hacerCopiaAutomatica(db).catch(() => {});

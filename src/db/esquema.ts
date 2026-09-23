@@ -325,6 +325,62 @@ const MIGRACIONES: (string | Migracion)[] = [
   DELETE FROM preferencias WHERE clave = 'historico_sincronizado_en';
   `,
   },
+  // v10: compras a cuotas (Cashea), movimientos rápidos, foto del comprobante y aportes
+  // automáticos a metas (los recurrentes se reconstruyen para aceptar APORTE_META).
+  {
+    sinClavesForaneas: true,
+    sql: `
+  CREATE TABLE compras_cuotas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    comercio TEXT NOT NULL,
+    descripcion TEXT,
+    total INTEGER NOT NULL CHECK (total > 0),
+    inicial INTEGER NOT NULL DEFAULT 0 CHECK (inicial >= 0),
+    cuotas INTEGER NOT NULL CHECK (cuotas BETWEEN 1 AND 24),
+    dias_entre_cuotas INTEGER NOT NULL DEFAULT 14 CHECK (dias_entre_cuotas > 0),
+    fecha TEXT NOT NULL,
+    categoria_id INTEGER REFERENCES categorias (id) ON DELETE SET NULL,
+    inicial_transaccion_id INTEGER,
+    creada_en TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
+  ALTER TABLE transacciones ADD COLUMN compra_id INTEGER REFERENCES compras_cuotas (id) ON DELETE CASCADE;
+  ALTER TABLE transacciones ADD COLUMN comprobante TEXT;
+  CREATE INDEX idx_transacciones_compra ON transacciones (compra_id);
+
+  CREATE TABLE plantillas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('GASTO', 'INGRESO')),
+    monto INTEGER CHECK (monto IS NULL OR monto > 0),
+    billetera_id INTEGER NOT NULL REFERENCES billeteras (id) ON DELETE CASCADE,
+    categoria_id INTEGER NOT NULL REFERENCES categorias (id) ON DELETE CASCADE,
+    icono TEXT NOT NULL DEFAULT 'lightning-bolt'
+  );
+
+  CREATE TABLE recurrentes_v10 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('GASTO', 'INGRESO', 'APORTE_META')),
+    monto INTEGER NOT NULL CHECK (monto > 0),
+    billetera_id INTEGER NOT NULL REFERENCES billeteras (id) ON DELETE CASCADE,
+    categoria_id INTEGER REFERENCES categorias (id) ON DELETE CASCADE,
+    meta_id INTEGER REFERENCES metas_ahorro (id) ON DELETE CASCADE,
+    frecuencia TEXT NOT NULL CHECK (frecuencia IN ('SEMANAL', 'QUINCENAL', 'MENSUAL')),
+    dia_ancla INTEGER NOT NULL CHECK (dia_ancla BETWEEN 1 AND 31),
+    proxima_fecha TEXT NOT NULL,
+    automatico INTEGER NOT NULL DEFAULT 0 CHECK (automatico IN (0, 1)),
+    activo INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1)),
+    CHECK ((tipo = 'APORTE_META') = (meta_id IS NOT NULL)),
+    CHECK (tipo = 'APORTE_META' OR categoria_id IS NOT NULL)
+  );
+  INSERT INTO recurrentes_v10 (id, nombre, tipo, monto, billetera_id, categoria_id, frecuencia, dia_ancla, proxima_fecha, automatico, activo)
+    SELECT id, nombre, tipo, monto, billetera_id, categoria_id, frecuencia, dia_ancla, proxima_fecha, automatico, activo
+    FROM recurrentes ORDER BY id;
+  DROP TABLE recurrentes;
+  ALTER TABLE recurrentes_v10 RENAME TO recurrentes;
+  `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

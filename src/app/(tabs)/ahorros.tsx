@@ -4,15 +4,17 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, FAB, List, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
+import { SeccionCuotas } from '../../components/SeccionCuotas';
 import { TarjetaDeuda } from '../../components/TarjetaDeuda';
 import { TarjetaMeta } from '../../components/TarjetaMeta';
 import { useTasas } from '../../components/TasasProvider';
 import { listarDeudas, resumenDeudas, type Deuda } from '../../db/deudas';
 import { listarMetas, type Meta } from '../../db/metas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
+import { actualizarAvisosVencimientos } from '../../lib/avisos';
 import { formatearMonto } from '../../lib/moneda';
 
-type Seccion = 'metas' | 'deudas';
+type Seccion = 'metas' | 'deudas' | 'cuotas';
 
 export default function PantallaAhorros() {
   const db = useSQLiteContext();
@@ -29,6 +31,7 @@ export default function PantallaAhorros() {
         .then(([m, d]) => {
           setMetas(m);
           setDeudas(d);
+          actualizarAvisosVencimientos(db).catch(() => {});
         })
         .catch((e) => Alert.alert('Error', String(e)));
     }, [db]),
@@ -43,10 +46,13 @@ export default function PantallaAhorros() {
       onValueChange={(v) => setSeccion(v as Seccion)}
       buttons={[
         { value: 'metas', label: 'Metas', icon: 'flag-checkered' },
-        { value: 'deudas', label: 'Deudas y préstamos', icon: 'handshake' },
+        { value: 'deudas', label: 'Deudas', icon: 'handshake' },
+        { value: 'cuotas', label: 'Cuotas', icon: 'cart-outline' },
       ]}
     />
   );
+
+  if (seccion === 'cuotas') return <SeccionCuotas encabezado={selector} />;
 
   if (seccion === 'deudas') {
     const abiertas = deudas.filter((d) => !d.cerrada);

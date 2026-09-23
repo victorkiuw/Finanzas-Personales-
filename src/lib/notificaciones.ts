@@ -78,3 +78,28 @@ export async function programarAvisosRecurrentes(
 export async function notificarAhora(titulo: string, cuerpo: string): Promise<void> {
   await Notifications.scheduleNotificationAsync({ content: { title: titulo, body: cuerpo }, trigger: null });
 }
+
+/**
+ * Reemplaza los avisos programados con este prefijo por los indicados (se
+ * ignoran los que ya pasaron). Sirve para cuotas, deudas por vencer, etc.
+ */
+export async function programarAvisos(
+  prefijo: string,
+  avisos: { id: string; titulo: string; cuerpo: string; cuando: Date }[],
+): Promise<void> {
+  const programadas = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    programadas
+      .filter((n) => n.identifier.startsWith(prefijo))
+      .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+  );
+  const ahora = Date.now();
+  for (const a of avisos) {
+    if (a.cuando.getTime() <= ahora) continue;
+    await Notifications.scheduleNotificationAsync({
+      identifier: `${prefijo}${a.id}`,
+      content: { title: a.titulo, body: a.cuerpo },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: a.cuando, channelId: CANAL },
+    });
+  }
+}
