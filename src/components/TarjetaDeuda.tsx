@@ -1,20 +1,12 @@
 import { StyleSheet, View } from 'react-native';
-import { Card, Chip, ProgressBar, Text, useTheme } from 'react-native-paper';
+import { Card, ProgressBar, Text, useTheme } from 'react-native-paper';
 
 import type { Deuda } from '../db/deudas';
-import type { Tasas } from '../db/tasas';
-import { NOMBRE_PAR, PARES } from '../lib/api-tasas';
+import { cambioDe, type Tasas } from '../db/tasas';
+import { NOMBRE_PAR, PARES, type ParDolar } from '../lib/api-tasas';
 import { convertir } from '../lib/conversion';
-import { fechaSimpleLegible } from '../lib/fechas';
+import { fechaSimpleLegible, formatearFechaCorta } from '../lib/fechas';
 import { formatearMonto } from '../lib/moneda';
-
-/** "Hoy son Bs. X (paralelo) · Bs. Y (BCV)" para una deuda en dólares. */
-export function equivalenteHoy(montoUsd: number, tasas: Tasas): string | null {
-  const partes = PARES.filter((p) => tasas[p]).map(
-    (p) => `${formatearMonto(convertir(montoUsd, 'USD', 'BS', tasas[p]!.tasa), 'BS')} (${NOMBRE_PAR[p]})`,
-  );
-  return partes.length ? partes.join(' · ') : null;
-}
 
 export function vencida(d: Deuda, hoy = new Date()): boolean {
   if (!d.fecha_limite || d.cerrada) return false;
@@ -22,40 +14,91 @@ export function vencida(d: Deuda, hoy = new Date()): boolean {
   return new Date(a, m - 1, dia, 23, 59) < hoy;
 }
 
-/** Progreso, pendiente y equivalente de hoy en bolívares si la deuda está en dólares. */
-export function ResumenDeuda({ deuda, tasas }: { deuda: Deuda; tasas: Tasas }) {
+/** La deuda se prestó en bolívares pero se lleva en dólares: se paga en Bs. a la tasa del día. */
+function enBolivaresAlDia(d: Deuda): boolean {
+  return d.moneda === 'BS' && d.unidad !== 'BS';
+}
+
+/** Bs. que hay que pagar hoy por `monto` (en la unidad de la deuda) con la tasa indicada. */
+function bolivaresHoy(monto: number, d: Deuda, tasas: Tasas, par: ParDolar): number | null {
+  return convertir(monto, d.unidad, 'BS', cambioDe(tasas, par));
+}
+
+interface Props {
+  deuda: Deuda;
+  tasas: Tasas;
+  referencia: ParDolar;
+  /** Con la frase del préstamo original (pantalla de la deuda). */
+  detalle?: boolean;
+}
+
+/**
+ * Lo que se debe hoy, en palabras sencillas. Si se prestó en bolívares llevando
+ * la cuenta en dólares, lo grande es cuántos bolívares hay que pagar hoy (con la
+ * tasa elegida en Inicio) y debajo su valor en dólares.
+ */
+export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: Props) {
   const tema = useTheme();
-  const progreso = deuda.total > 0 ? Math.min(deuda.pagado / deuda.total, 1) : 0;
-  const hoy = deuda.unidad !== 'BS' && deuda.pendiente > 0 && deuda.moneda === 'BS' ? equivalenteHoy(deuda.pendiente, tasas) : null;
+  const suave = { color: tema.colors.onSurfaceVariant };
+  const meDeben = d.tipo === 'ME_DEBEN';
+  const alDia = enBolivaresAlDia(d);
+  const pendienteBs = alDia ? bolivaresHoy(d.pendiente, d, tasas, referencia) : null;
+  const otra = PARES.find((p) => p !== referencia)!;
+  const pendienteOtra = alDia ? bolivaresHoy(d.pendiente, d, tasas, otra) : null;
+
+  let titulo: string;
+  if (d.cerrada || d.pendiente === 0) titulo = meDeben ? 'Ya te pagó todo' : 'Ya pagaste todo';
+  else if (alDia) titulo = meDeben ? 'Te debe hoy' : 'Debes hoy';
+  else titulo = meDeben ? 'Te debe' : 'Debes';
+
   return (
     <View style={styles.resumen}>
-      <View style={styles.fila}>
-        <Text variant="titleLarge" style={styles.cifra}>
-          {formatearMonto(deuda.pendiente, deuda.unidad)}
-        </Text>
-        <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
-          {`de ${formatearMonto(deuda.total, deuda.unidad)}`}
-        </Text>
-      </View>
-      <ProgressBar progress={progreso} style={styles.barra} />
-      {hoy && (
-        <Text variant="bodyMedium">
-          <Text variant="labelLarge">Hoy: </Text>
-          {hoy}
-        </Text>
+      <Text variant="labelLarge" style={suave}>
+        {titulo}
+      </Text>
+      {d.pendiente > 0 && !d.cerrada && (
+        <>
+          <Text variant="headlineSmall" style={styles.cifra}>
+            {pendienteBs !== null ? formatearMonto(pendienteBs, 'BS') : formatearMonto(d.pendiente, d.unidad)}
+          </Text>
+          {alDia && pendienteBs !== null && (
+            <Text variant="bodyMedium">{`= ${formatearMonto(d.pendiente, d.unidad)} a tasa ${NOMBRE_PAR[referencia]} de hoy`}</Text>
+          )}
+          {alDia && pendienteBs === null && (
+            <Text variant="bodySmall" style={suave}>
+              Sin tasa del día para pasarlo a bolívares.
+            </Text>
+          )}
+          {detalle && pendienteOtra !== null && (
+            <Text variant="bodySmall" style={suave}>
+              {`A tasa ${NOMBRE_PAR[otra]} serían ${formatearMonto(pendienteOtra, 'BS')}`}
+            </Text>
+          )}
+        </>
       )}
-      {deuda.tasa_referencia && (
-        <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-          {`Prestado: ${formatearMonto(deuda.monto, deuda.moneda)} a ${String(deuda.tasa_referencia).replace('.', ',')} Bs./USD`}
+
+      {d.pagado > 0 && (
+        <>
+          <ProgressBar progress={d.total > 0 ? Math.min(d.pagado / d.total, 1) : 0} style={styles.barra} />
+          <Text variant="bodySmall" style={suave}>
+            {`${meDeben ? 'Ya te pagó' : 'Ya pagaste'} ${formatearMonto(d.pagado, d.unidad)} de ${formatearMonto(d.total, d.unidad)}`}
+          </Text>
+        </>
+      )}
+
+      {detalle && (
+        <Text variant="bodyMedium" style={styles.origen}>
+          {`${meDeben ? 'Le prestaste' : 'Te prestó'} ${formatearMonto(d.monto, d.moneda)} el ${formatearFechaCorta(new Date(d.fecha))}`}
+          {alDia ? ` (eso era ${formatearMonto(d.total, d.unidad)} ese día).` : '.'}
         </Text>
       )}
     </View>
   );
 }
 
-export function TarjetaDeuda({ deuda, tasas, onPress }: { deuda: Deuda; tasas: Tasas; onPress: () => void }) {
+export function TarjetaDeuda({ deuda, tasas, referencia, onPress }: Omit<Props, 'detalle'> & { onPress: () => void }) {
   const tema = useTheme();
-  const meDeben = deuda.tipo === 'ME_DEBEN';
+  const vence = deuda.fecha_limite && !deuda.cerrada;
   return (
     <Card mode="contained" onPress={onPress} style={[styles.tarjeta, deuda.cerrada && styles.cerrada]}>
       <Card.Title
@@ -63,19 +106,14 @@ export function TarjetaDeuda({ deuda, tasas, onPress }: { deuda: Deuda; tasas: T
         subtitle={
           deuda.cerrada
             ? 'Saldada'
-            : deuda.fecha_limite
-              ? `${vencida(deuda) ? 'Vencida' : 'Vence'} el ${fechaSimpleLegible(deuda.fecha_limite)}`
+            : vence
+              ? `${vencida(deuda) ? 'Venció' : 'Vence'} el ${fechaSimpleLegible(deuda.fecha_limite!)}`
               : undefined
         }
         subtitleStyle={vencida(deuda) ? { color: tema.colors.error } : undefined}
-        right={() => (
-          <Chip compact style={styles.chip} icon={meDeben ? 'arrow-bottom-left' : 'arrow-top-right'}>
-            {meDeben ? 'Me debe' : 'Le debo'}
-          </Chip>
-        )}
       />
       <Card.Content>
-        <ResumenDeuda deuda={deuda} tasas={tasas} />
+        <ResumenDeuda deuda={deuda} tasas={tasas} referencia={referencia} />
       </Card.Content>
     </Card>
   );
@@ -84,9 +122,8 @@ export function TarjetaDeuda({ deuda, tasas, onPress }: { deuda: Deuda; tasas: T
 const styles = StyleSheet.create({
   tarjeta: { marginHorizontal: 16, marginBottom: 12 },
   cerrada: { opacity: 0.6 },
-  chip: { marginRight: 12 },
-  resumen: { gap: 6 },
-  fila: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  resumen: { gap: 4 },
   cifra: { fontVariant: ['tabular-nums'], fontWeight: '700' },
-  barra: { height: 8, borderRadius: 4 },
+  barra: { height: 6, borderRadius: 3, marginTop: 6 },
+  origen: { marginTop: 8 },
 });

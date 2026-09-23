@@ -17,7 +17,7 @@ type Seccion = 'metas' | 'deudas';
 export default function PantallaAhorros() {
   const db = useSQLiteContext();
   const tema = useTheme();
-  const { tasas, referencia } = useTasas();
+  const { tasas, referencia, cambio } = useTasas();
   const [seccion, setSeccion] = useState<Seccion>('metas');
   const [metas, setMetas] = useState<Meta[] | null>(null);
   const [deudas, setDeudas] = useState<Deuda[]>([]);
@@ -51,14 +51,14 @@ export default function PantallaAhorros() {
   if (seccion === 'deudas') {
     const abiertas = deudas.filter((d) => !d.cerrada);
     const saldadas = deudas.filter((d) => d.cerrada);
-    const resumen = resumenDeudas(abiertas, tasas[referencia]?.tasa ?? null);
+    const resumen = resumenDeudas(abiertas, cambio);
     return (
       <View style={styles.flex}>
         <FlatList
           data={abiertas}
           keyExtractor={(d) => String(d.id)}
           renderItem={({ item }) => (
-            <TarjetaDeuda deuda={item} tasas={tasas} onPress={() => router.push(`/deuda/${item.id}`)} />
+            <TarjetaDeuda deuda={item} tasas={tasas} referencia={referencia} onPress={() => router.push(`/deuda/${item.id}`)} />
           )}
           contentContainerStyle={{ paddingBottom: 96 }}
           ListHeaderComponent={
@@ -82,7 +82,7 @@ export default function PantallaAhorros() {
                   </Card.Content>
                   <Card.Content>
                     <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-                      {`Deudas en Bs. sin indexar convertidas con la tasa ${NOMBRE_PAR[referencia]}.`}
+                      {`En dólares, con la tasa ${NOMBRE_PAR[referencia]} de hoy.`}
                       {resumen.completo ? '' : ' Falta la tasa para convertir algunas.'}
                     </Text>
                   </Card.Content>
@@ -113,7 +113,7 @@ export default function PantallaAhorros() {
                 style={{ backgroundColor: tema.colors.background }}
               >
                 {saldadas.map((d) => (
-                  <TarjetaDeuda key={d.id} deuda={d} tasas={tasas} onPress={() => router.push(`/deuda/${d.id}`)} />
+                  <TarjetaDeuda key={d.id} deuda={d} tasas={tasas} referencia={referencia} onPress={() => router.push(`/deuda/${d.id}`)} />
                 ))}
               </List.Accordion>
             ) : null

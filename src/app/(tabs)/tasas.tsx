@@ -17,8 +17,8 @@ import {
 
 import { GraficoLineas } from '../../components/GraficoLineas';
 import { useTasas } from '../../components/TasasProvider';
-import { alinearHistoriales, listarHistorial } from '../../db/tasas';
-import { NOMBRE_PAR, PARES, type Par } from '../../lib/api-tasas';
+import { alinearHistoriales, cambioDe, listarHistorial } from '../../db/tasas';
+import { NOMBRE_PAR, PARES, TODOS_LOS_PARES, type Par } from '../../lib/api-tasas';
 import { brecha, convertir } from '../../lib/conversion';
 import { fechaSimpleLegible, formatearFechaCorta, haceCuanto } from '../../lib/fechas';
 import { formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../../lib/moneda';
@@ -30,10 +30,18 @@ const RANGOS = [
   { dias: 365, etiqueta: '1 año' },
 ];
 
-/** Colores de la paleta validada (contraste y daltonismo): BCV azul, paralelo naranja. */
-function coloresTasas(oscuro: boolean) {
-  return oscuro ? { BCV: '#3987e5', PARALELO: '#d95926' } : { BCV: '#2a78d6', PARALELO: '#eb6834' };
+/** Colores de la paleta validada (contraste y daltonismo): BCV azul, USDT naranja, euro aguamarina. */
+function coloresTasas(oscuro: boolean): Record<Par, string> {
+  return oscuro
+    ? { BCV: '#3987e5', PARALELO: '#d95926', EURO: '#199e70' }
+    : { BCV: '#2a78d6', PARALELO: '#eb6834', EURO: '#1baf7a' };
 }
+
+const DESCRIPCION_PAR: Record<Par, string> = {
+  BCV: 'Dólar BCV (oficial)',
+  PARALELO: 'USDT (mercado / paralelo)',
+  EURO: 'Euro BCV (oficial)',
+};
 
 type Historial = { dia: string; tasa: number }[];
 
@@ -42,18 +50,20 @@ export default function PantallaTasas() {
   const db = useSQLiteContext();
   const { tasas, actualizando, error, actualizar, guardarManual, versionHistorial } = useTasas();
   const [rango, setRango] = useState(30);
-  const [historial, setHistorial] = useState<{ BCV: Historial; PARALELO: Historial } | null>(null);
+  const [historial, setHistorial] = useState<Record<Par, Historial> | null>(null);
 
   useEffect(() => {
-    Promise.all([listarHistorial(db, 'BCV'), listarHistorial(db, 'PARALELO')])
-      .then(([bcv, paralelo]) => setHistorial({ BCV: bcv, PARALELO: paralelo }))
+    Promise.all(TODOS_LOS_PARES.map((p) => listarHistorial(db, p)))
+      .then(([bcv, paralelo, euro]) => setHistorial({ BCV: bcv, PARALELO: paralelo, EURO: euro }))
       .catch(() => {});
   }, [db, versionHistorial]);
 
   const desde = new Date();
   desde.setDate(desde.getDate() - rango);
   const clavedesde = `${desde.getFullYear()}-${String(desde.getMonth() + 1).padStart(2, '0')}-${String(desde.getDate()).padStart(2, '0')}`;
-  const alineado = historial ? alinearHistoriales([historial.BCV, historial.PARALELO], clavedesde) : null;
+  // El euro solo se dibuja si ya hay historial suyo.
+  const paresGrafico = TODOS_LOS_PARES.filter((p) => p !== 'EURO' || (historial?.EURO.length ?? 0) > 0);
+  const alineado = historial ? alinearHistoriales(paresGrafico.map((p) => historial[p]), clavedesde) : null;
   const colores = coloresTasas(tema.dark);
   const [moneda, setMoneda] = useState<Moneda>('USD');
   const [montoTexto, setMontoTexto] = useState('1');
@@ -99,7 +109,8 @@ export default function PantallaTasas() {
         {monto === null && montoTexto.trim() !== '' && <HelperText type="error">Número no válido</HelperText>}
 
         {PARES.map((par) => {
-          const tasa = tasas[par]?.tasa;
+          const cambio = cambioDe(tasas, par);
+          const tasa = cambio.dolar;
           return (
             <Card key={par} mode="outlined">
               <Card.Content style={styles.resultado}>
@@ -109,18 +120,22 @@ export default function PantallaTasas() {
                 {!tasa ? (
                   <Text variant="bodyMedium">Sin tasa disponible.</Text>
                 ) : (
-                  otras.map((m) => (
-                    <Text key={m} variant="headlineSmall" style={styles.cifra}>
-                      {monto !== null ? formatearMonto(convertir(monto, moneda, m, tasa), m) : '—'}
-                    </Text>
-                  ))
+                  otras.map((m) => {
+                    const v = monto !== null ? convertir(monto, moneda, m, cambio) : null;
+                    return (
+                      <Text key={m} variant="headlineSmall" style={styles.cifra}>
+                        {v !== null ? formatearMonto(v, m) : '—'}
+                      </Text>
+                    );
+                  })
                 )}
               </Card.Content>
             </Card>
           );
         })}
         <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-          USD y USDT se toman como equivalentes (1:1). El bolívar se convierte con cada tasa.
+          USD y USDT se toman como equivalentes (1:1). El bolívar se convierte con cada tasa; el euro, con el euro
+          BCV (y con la tasa USDT, manteniendo la misma relación euro/dólar).
         </Text>
 
         <Divider style={styles.divisor} />
@@ -137,16 +152,16 @@ export default function PantallaTasas() {
           <HelperText type="error">{`${error} Se usa la última tasa guardada.`}</HelperText>
         )}
 
-        {PARES.map((par) => {
+        {TODOS_LOS_PARES.map((par) => {
           const t = tasas[par];
           return (
             <Card key={par} mode="contained" onPress={() => abrirEdicion(par)}>
               <Card.Content style={styles.tasa}>
                 <View style={styles.flex}>
-                  <Text variant="labelLarge">{par === 'BCV' ? 'BCV (oficial)' : 'Paralelo (mercado / USDT)'}</Text>
+                  <Text variant="labelLarge">{DESCRIPCION_PAR[par]}</Text>
                   <Text variant="headlineMedium" style={styles.cifra}>
                     {t ? `${formatearTasa(t.tasa)}` : '—'}
-                    <Text variant="bodyMedium">{t ? '  Bs./USD' : ''}</Text>
+                    <Text variant="bodyMedium">{t ? (par === 'EURO' ? '  Bs./€' : '  Bs./USD') : ''}</Text>
                   </Text>
                   <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
                     {!t
@@ -162,7 +177,7 @@ export default function PantallaTasas() {
         })}
         {bcv && paralelo && (
           <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
-            {`Brecha: el paralelo está ${brecha(bcv, paralelo).toFixed(1).replace('.', ',')}% sobre el BCV.`}
+            {`Brecha: el USDT está ${brecha(bcv, paralelo).toFixed(1).replace('.', ',')}% sobre el BCV.`}
           </Text>
         )}
         <Card mode="outlined">
@@ -178,10 +193,7 @@ export default function PantallaTasas() {
             {alineado && (
               <GraficoLineas
                 etiquetas={alineado.dias.map(fechaSimpleLegible)}
-                series={[
-                  { nombre: 'BCV', color: colores.BCV, valores: alineado.valores[0] },
-                  { nombre: 'Paralelo', color: colores.PARALELO, valores: alineado.valores[1] },
-                ]}
+                series={paresGrafico.map((p, i) => ({ nombre: NOMBRE_PAR[p], color: colores[p], valores: alineado.valores[i] }))}
                 formatear={formatearTasa}
               />
             )}
@@ -198,7 +210,7 @@ export default function PantallaTasas() {
           <Dialog.Title>{editando ? `Tasa ${NOMBRE_PAR[editando]}` : ''}</Dialog.Title>
           <Dialog.Content>
             <TextInput
-              label="Bs. por dólar"
+              label={editando === 'EURO' ? 'Bs. por euro' : 'Bs. por dólar'}
               value={tasaManual}
               onChangeText={setTasaManual}
               keyboardType="decimal-pad"

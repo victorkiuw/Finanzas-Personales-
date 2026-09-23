@@ -15,7 +15,17 @@ export const NOMBRE_BD = 'finanzas.db';
  *   `monto` a billetera_origen_id y resta `monto_destino` de la meta. El saldo
  *   de una meta se calcula a partir de estos movimientos.
  */
-const MIGRACIONES: string[] = [
+interface Migracion {
+  sql: string;
+  /**
+   * Reconstruye tablas referenciadas por otras: se ejecuta con las claves
+   * foráneas desactivadas (el procedimiento que recomienda SQLite) y se
+   * comprueba que sigan consistentes antes de confirmar.
+   */
+  sinClavesForaneas?: boolean;
+}
+
+const MIGRACIONES: (string | Migracion)[] = [
   `
   CREATE TABLE billeteras (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -217,6 +227,104 @@ const MIGRACIONES: string[] = [
     activo INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1))
   );
   `,
+  // v9: euros (moneda EUR y tasa del euro BCV) y billeteras que no cuentan en el total.
+  // Para cambiar los CHECK se reconstruyen las tablas con las claves foráneas desactivadas
+  // (si no, borrar la tabla vieja borraría en cascada los movimientos); ver migrar().
+  {
+    sinClavesForaneas: true,
+    sql: `
+  CREATE TABLE billeteras_v9 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS', 'USDT', 'EUR')),
+    balance_inicial INTEGER NOT NULL DEFAULT 0,
+    icono TEXT NOT NULL DEFAULT 'wallet',
+    color_hex TEXT NOT NULL DEFAULT '#2E7D32',
+    archivada INTEGER NOT NULL DEFAULT 0 CHECK (archivada IN (0, 1)),
+    creada_en TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    comision_porcentaje REAL NOT NULL DEFAULT 0 CHECK (comision_porcentaje >= 0),
+    comision_minima INTEGER NOT NULL DEFAULT 0 CHECK (comision_minima >= 0),
+    margen_cambio REAL,
+    en_total INTEGER NOT NULL DEFAULT 1 CHECK (en_total IN (0, 1))
+  );
+  INSERT INTO billeteras_v9 (id, nombre, moneda, balance_inicial, icono, color_hex, archivada, creada_en,
+      comision_porcentaje, comision_minima, margen_cambio)
+    SELECT id, nombre, moneda, balance_inicial, icono, color_hex, archivada, creada_en,
+      comision_porcentaje, comision_minima, margen_cambio
+    FROM billeteras ORDER BY id;
+  DROP TABLE billeteras;
+  ALTER TABLE billeteras_v9 RENAME TO billeteras;
+
+  CREATE TABLE metas_ahorro_v9 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    monto_objetivo INTEGER NOT NULL CHECK (monto_objetivo > 0),
+    moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS', 'USDT', 'EUR')),
+    fecha_objetivo TEXT,
+    color_hex TEXT NOT NULL DEFAULT '#1565C0',
+    archivada INTEGER NOT NULL DEFAULT 0 CHECK (archivada IN (0, 1)),
+    creada_en TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  INSERT INTO metas_ahorro_v9 (id, nombre, monto_objetivo, moneda, fecha_objetivo, color_hex, archivada, creada_en)
+    SELECT id, nombre, monto_objetivo, moneda, fecha_objetivo, color_hex, archivada, creada_en
+    FROM metas_ahorro ORDER BY id;
+  DROP TABLE metas_ahorro;
+  ALTER TABLE metas_ahorro_v9 RENAME TO metas_ahorro;
+
+  CREATE TABLE deudas_v9 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('ME_DEBEN', 'DEBO')),
+    persona TEXT NOT NULL,
+    moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS', 'USDT', 'EUR')),
+    monto INTEGER NOT NULL CHECK (monto > 0),
+    tasa_referencia REAL CHECK (tasa_referencia IS NULL OR tasa_referencia > 0),
+    fecha TEXT NOT NULL,
+    fecha_limite TEXT,
+    nota TEXT,
+    cerrada INTEGER NOT NULL DEFAULT 0 CHECK (cerrada IN (0, 1)),
+    creada_en TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  INSERT INTO deudas_v9 (id, tipo, persona, moneda, monto, tasa_referencia, fecha, fecha_limite, nota, cerrada, creada_en)
+    SELECT id, tipo, persona, moneda, monto, tasa_referencia, fecha, fecha_limite, nota, cerrada, creada_en
+    FROM deudas ORDER BY id;
+  DROP TABLE deudas;
+  ALTER TABLE deudas_v9 RENAME TO deudas;
+
+  CREATE TABLE presupuestos_v9 (
+    categoria_id INTEGER PRIMARY KEY REFERENCES categorias (id) ON DELETE CASCADE,
+    monto INTEGER NOT NULL CHECK (monto > 0),
+    moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS', 'USDT', 'EUR'))
+  );
+  INSERT INTO presupuestos_v9 (categoria_id, monto, moneda) SELECT categoria_id, monto, moneda FROM presupuestos;
+  DROP TABLE presupuestos;
+  ALTER TABLE presupuestos_v9 RENAME TO presupuestos;
+
+  CREATE TABLE tasas_cache_v9 (
+    par TEXT PRIMARY KEY CHECK (par IN ('BCV', 'PARALELO', 'EURO')),
+    tasa REAL NOT NULL CHECK (tasa > 0),
+    ultima_actualizacion TEXT NOT NULL,
+    consultada_en TEXT,
+    origen TEXT NOT NULL DEFAULT 'API' CHECK (origen IN ('API', 'MANUAL'))
+  );
+  INSERT INTO tasas_cache_v9 (par, tasa, ultima_actualizacion, consultada_en, origen)
+    SELECT par, tasa, ultima_actualizacion, consultada_en, origen FROM tasas_cache;
+  DROP TABLE tasas_cache;
+  ALTER TABLE tasas_cache_v9 RENAME TO tasas_cache;
+
+  CREATE TABLE historial_tasas_v9 (
+    par TEXT NOT NULL CHECK (par IN ('BCV', 'PARALELO', 'EURO')),
+    dia TEXT NOT NULL,
+    tasa REAL NOT NULL CHECK (tasa > 0),
+    PRIMARY KEY (par, dia)
+  );
+  INSERT INTO historial_tasas_v9 (par, dia, tasa) SELECT par, dia, tasa FROM historial_tasas;
+  DROP TABLE historial_tasas;
+  ALTER TABLE historial_tasas_v9 RENAME TO historial_tasas;
+
+  -- Para que el histórico (con el euro) se descargue de nuevo al abrir la app.
+  DELETE FROM preferencias WHERE clave = 'historico_sincronizado_en';
+  `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;
@@ -227,11 +335,22 @@ export async function migrar(db: BaseDatos, hasta = MIGRACIONES.length): Promise
   const fila = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version', []);
   const actual = fila?.user_version ?? 0;
   for (let v = actual; v < hasta; v++) {
+    const m = MIGRACIONES[v];
+    const { sql, sinClavesForaneas = false } = typeof m === 'string' ? { sql: m } : m;
+    // Este PRAGMA no tiene efecto dentro de una transacción: va antes del BEGIN.
+    if (sinClavesForaneas) await db.execAsync('PRAGMA foreign_keys = OFF;');
     try {
-      await db.execAsync(`BEGIN; ${MIGRACIONES[v]}; PRAGMA user_version = ${v + 1}; COMMIT;`);
+      await db.execAsync(`BEGIN; ${sql}; PRAGMA user_version = ${v + 1};`);
+      if (sinClavesForaneas) {
+        const rotas = await db.getAllAsync('PRAGMA foreign_key_check', []);
+        if (rotas.length > 0) throw new Error(`La migración ${v + 1} dejó referencias rotas.`);
+      }
+      await db.execAsync('COMMIT;');
     } catch (error) {
       await db.execAsync('ROLLBACK').catch(() => {});
       throw error;
+    } finally {
+      if (sinClavesForaneas) await db.execAsync('PRAGMA foreign_keys = ON;');
     }
   }
 }

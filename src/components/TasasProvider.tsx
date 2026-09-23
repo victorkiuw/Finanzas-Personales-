@@ -5,13 +5,15 @@ import { AppState } from 'react-native';
 import { guardarPreferencia, leerPreferencia } from '../db/preferencias';
 import {
   actualizarTasasDesdeApi,
+  cambioDe,
   guardarTasa,
   obtenerTasas,
   sincronizarHistorico,
   tasasVencidas,
   type Tasas,
 } from '../db/tasas';
-import { ErrorTasas, type Par } from '../lib/api-tasas';
+import { ErrorTasas, type Par, type ParDolar } from '../lib/api-tasas';
+import type { Cambio } from '../lib/conversion';
 import { revisarAlertasTasa } from '../lib/avisos';
 import { esMoneda, type Moneda } from '../lib/moneda';
 
@@ -23,9 +25,11 @@ interface ContextoTasas {
   /** Consulta la API. Sin `forzar`, solo lo hace si el caché está vencido. */
   actualizar: (forzar?: boolean) => Promise<void>;
   guardarManual: (par: Par, tasa: number) => Promise<void>;
-  /** Tasa usada para el total consolidado. */
-  referencia: Par;
-  cambiarReferencia: (par: Par) => void;
+  /** Tasa del dólar usada para el total consolidado. */
+  referencia: ParDolar;
+  cambiarReferencia: (par: ParDolar) => void;
+  /** Tasas vigentes (dólar según la referencia y euro) para convertir. */
+  cambio: Cambio;
   /** Moneda en la que se muestra el total consolidado. */
   monedaBase: Moneda;
   cambiarMonedaBase: (m: Moneda) => void;
@@ -43,7 +47,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
   const [tasas, setTasas] = useState<Tasas>({});
   const [actualizando, setActualizando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [referencia, setReferencia] = useState<Par>('PARALELO');
+  const [referencia, setReferencia] = useState<ParDolar>('PARALELO');
   const [monedaBase, setMonedaBase] = useState<Moneda>('USD');
   const [versionHistorial, setVersionHistorial] = useState(0);
   const tasasRef = useRef<Tasas>({});
@@ -106,7 +110,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
   );
 
   const cambiarReferencia = useCallback(
-    (par: Par) => {
+    (par: ParDolar) => {
       setReferencia(par);
       guardarPreferencia(db, CLAVE_REFERENCIA, par).catch(() => {});
     },
@@ -131,6 +135,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
         guardarManual,
         referencia,
         cambiarReferencia,
+        cambio: cambioDe(tasas, referencia),
         monedaBase,
         cambiarMonedaBase,
         versionHistorial,

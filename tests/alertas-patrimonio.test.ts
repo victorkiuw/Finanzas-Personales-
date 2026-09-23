@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { crearBilletera } from '../src/db/billeteras';
+import { actualizarBilletera, crearBilletera, obtenerBilletera } from '../src/db/billeteras';
 import { listarCategorias } from '../src/db/categorias';
 import { crearMeta, moverFondosMeta } from '../src/db/metas';
 import { crearMovimiento } from '../src/db/movimientos';
@@ -21,7 +21,7 @@ test('alertas de tasa: subida del paralelo y brecha', () => {
   assert.deepEqual(evaluarAlertas({ paralelo: 1100 }, null, config), []);
 });
 
-test('patrimonio por mes con billeteras, movimientos, transferencias y metas', async () => {
+test('disponible por mes: billeteras que cuentan, sin metas ni billeteras aparte, con euros', async () => {
   const db = await crearBdMemoria();
   const base = { icono: 'wallet', color_hex: '#000000' };
   const usd = await crearBilletera(db, { ...base, nombre: 'Efectivo', moneda: 'USD', balance_inicial: 10000 });
@@ -37,14 +37,26 @@ test('patrimonio por mes con billeteras, movimientos, transferencias y metas', a
   const meta = await crearMeta(db, { nombre: 'X', monto_objetivo: 100, moneda: 'USD', fecha_objetivo: null, color_hex: '#000000' });
   await moverFondosMeta(db, { tipo: 'APORTE_META', meta_id: meta, billetera_id: usd, monto: 2000, fecha: agosto });
 
-  const conv = new Conversor([{ dia: '2026-06-01', tasa: 100 }, { dia: '2026-08-01', tasa: 200 }], null);
+  // Binance guardado aparte: no cuenta. Una cuenta en euros sí, con el euro BCV del día.
+  const aparte = await crearBilletera(db, { ...base, nombre: 'Binance', moneda: 'USDT', balance_inicial: 99900, en_total: false });
+  await crearBilletera(db, { ...base, nombre: 'Euros', moneda: 'EUR', balance_inicial: 1000 });
+
+  const dolar = [{ dia: '2026-06-01', tasa: 100 }, { dia: '2026-08-01', tasa: 200 }];
+  const euro = { euro: [{ dia: '2026-06-01', tasa: 120 }, { dia: '2026-08-01', tasa: 240 }], bcv: dolar };
+  const conv = new Conversor(dolar, null, euro, null);
   const puntos = await patrimonioPorMes(db, ['2026-06', '2026-07', '2026-08'], conv, 'USD');
   assert.deepEqual(puntos.map((p) => p.total), [
-    10000 + 10000, // $100 + Bs. 10.000 a 100
-    15000 + 10000, // +$50 de sueldo
-    // USD: 150 - 10 - 20 = 120; meta $20; Bs: 10.000 - 5.000 + 2.000 = 7.000 a 200 = $35
-    12000 + 2000 + 3500,
+    10000 + 10000 + 1200, // $100 + Bs. 10.000 a 100 + €10 a 1,2 $/€
+    15000 + 10000 + 1200, // +$50 de sueldo
+    // USD: 150 - 10 - 20 = 130 - ... = 120 (la meta no cuenta); Bs: 7.000 a 200 = $35; €10 = $12
+    12000 + 3500 + 1200,
   ]);
+
+  // Al volver a contar Binance, entra en todos los meses.
+  const b = (await obtenerBilletera(db, aparte))!;
+  await actualizarBilletera(db, aparte, { ...b, en_total: true });
+  const conBinance = await patrimonioPorMes(db, ['2026-06'], conv, 'USD');
+  assert.equal(conBinance[0].total, 10000 + 10000 + 1200 + 99900);
 });
 
 test('alinearHistoriales rellena días sin cotización', async () => {

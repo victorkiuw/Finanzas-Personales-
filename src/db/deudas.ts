@@ -1,4 +1,5 @@
-import { esMoneda, type Moneda } from '../lib/moneda';
+import { convertir, type Cambio } from '../lib/conversion';
+import { equivalentes, esMoneda, INFO_MONEDA, type Moneda } from '../lib/moneda';
 import { calcularTasa } from '../lib/tasa';
 import { ErrorValidacion } from './billeteras';
 import { enTransaccion, type BaseDatos } from './tipos';
@@ -206,9 +207,9 @@ export async function actualizarDeuda(db: BaseDatos, id: number, d: DatosDeuda):
     if (d.tipo !== actual.tipo) {
       throw new ErrorValidacion('Ya tiene pagos: para cambiar si prestaste o te prestaron, borra antes los pagos.');
     }
-    if ((unidadDeuda(d.moneda, tasa) === 'BS') !== (actual.unidad === 'BS')) {
+    if (!equivalentes(unidadDeuda(d.moneda, tasa), actual.unidad)) {
       throw new ErrorValidacion(
-        `Ya tiene pagos contados en ${actual.unidad === 'BS' ? 'bolívares' : 'dólares'}: para cambiarlo, borra antes los pagos.`,
+        `Ya tiene pagos contados en ${INFO_MONEDA[actual.unidad].nombre.toLowerCase()}: para cambiarlo, borra antes los pagos.`,
       );
     }
     if (actual.pagado > Math.ceil(total * (1 + TOLERANCIA))) {
@@ -271,8 +272,7 @@ export async function registrarPagoDeuda(db: BaseDatos, p: DatosPagoDeuda): Prom
   if (Number.isNaN(Date.parse(p.fecha))) throw new ErrorValidacion('La fecha no es válida.');
 
   // USD y USDT se consideran equivalentes.
-  const mismaUnidad =
-    billetera.moneda === deuda.unidad || (billetera.moneda !== 'BS' && deuda.unidad !== 'BS');
+  const mismaUnidad = equivalentes(billetera.moneda, deuda.unidad);
   let enUnidad = mismaUnidad ? p.monto : p.monto_unidad;
   if (!enUnidad || !Number.isSafeInteger(enUnidad) || enUnidad <= 0) {
     throw new ErrorValidacion('Indica la tasa o cuánto descuenta de la deuda.');
@@ -305,17 +305,15 @@ export async function registrarPagoDeuda(db: BaseDatos, p: DatosPagoDeuda): Prom
   });
 }
 
-/** Totales pendientes (en USD, con la tasa indicada para lo que esté en Bs.) para el resumen. */
-export function resumenDeudas(deudas: Deuda[], bsPorDolar: number | null): { meDeben: number; debo: number; completo: boolean } {
+/** Totales pendientes en dólares (convertidos con las tasas indicadas) para el resumen. */
+export function resumenDeudas(deudas: Deuda[], cambio: Cambio): { meDeben: number; debo: number; completo: boolean } {
   let meDeben = 0;
   let debo = 0;
   let completo = true;
   for (const d of deudas) {
     if (d.cerrada || d.pendiente === 0) continue;
-    let usd: number;
-    if (d.unidad !== 'BS') usd = d.pendiente;
-    else if (bsPorDolar) usd = Math.round(d.pendiente / bsPorDolar);
-    else {
+    const usd = convertir(d.pendiente, d.unidad, 'USD', cambio);
+    if (usd === null) {
       completo = false;
       continue;
     }

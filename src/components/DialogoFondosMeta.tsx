@@ -5,8 +5,8 @@ import { Button, Dialog, HelperText, Portal, Text, TextInput } from 'react-nativ
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import { moverFondosMeta, type Meta } from '../db/metas';
-import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
+import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
@@ -60,7 +60,7 @@ export function DialogoFondosMeta({ meta, tipo, onCerrar }: Props) {
   // "monto" es lo que sale (billetera al abonar, meta al retirar); "equivalente" lo que llega.
   const monto = parsearMonto(montoTexto);
   // Entre USD y USDT la tasa por defecto es 1; con Bs. hay que escribirla.
-  const tasaPorDefecto = conCambio && !hayBolivar(de, a) ? 1 : null;
+  const tasaPorDefecto = conCambio && equivalentes(de, a) ? 1 : null;
   const tasa = parsearTasa(tasaTexto) ?? tasaPorDefecto;
   const equivalente =
     equivalenteTexto.trim() !== ''

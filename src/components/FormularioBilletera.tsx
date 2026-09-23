@@ -8,6 +8,7 @@ import {
   HelperText,
   IconButton,
   SegmentedButtons,
+  Switch,
   Text,
   TextInput,
   useTheme,
@@ -53,6 +54,7 @@ export function FormularioBilletera({ id }: Props) {
   const [comisionMin, setComisionMin] = useState('');
   // Margen del banco sobre la BCV al comprar/vender dólares, en % (vacío = no se usa).
   const [margenTexto, setMargenTexto] = useState('');
+  const [enTotal, setEnTotal] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -74,6 +76,7 @@ export function FormularioBilletera({ id }: Props) {
       setComisionPct(porcentajeATexto(b.comision_porcentaje));
       setComisionMin(b.comision_minima ? centimosATexto(b.comision_minima) : '');
       setMargenTexto(b.margen_cambio === null ? '' : String(b.margen_cambio).replace('.', ','));
+      setEnTotal(b.en_total);
       setMovimientos(await contarMovimientos(db, id));
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
@@ -110,6 +113,7 @@ export function FormularioBilletera({ id }: Props) {
       comision_minima: comision.minima,
       // El margen solo aplica a cuentas en bolívares.
       margen_cambio: moneda === 'BS' ? margen : null,
+      en_total: enTotal,
     };
     try {
       if (id === undefined) await crearBilletera(db, datos);
@@ -235,6 +239,18 @@ export function FormularioBilletera({ id }: Props) {
           </View>
         )}
 
+        <View style={styles.filaSwitch}>
+          <View style={styles.flexUno}>
+            <Text variant="labelLarge">Contar en el total</Text>
+            <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+              {enTotal
+                ? 'Su saldo se suma a lo disponible en Inicio.'
+                : 'Guardada aparte: no se suma a lo disponible y su saldo aparece oculto en Inicio.'}
+            </Text>
+          </View>
+          <Switch value={enTotal} onValueChange={setEnTotal} accessibilityLabel="Contar en el total" />
+        </View>
+
         <View>
           <Text variant="labelLarge" style={styles.etiqueta}>
             Icono
@@ -297,6 +313,8 @@ export function FormularioBilletera({ id }: Props) {
 }
 
 const styles = StyleSheet.create({
+  filaSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  flexUno: { flex: 1 },
   flex: { flex: 1 },
   cargando: { marginTop: 48 },
   contenido: { padding: 16, gap: 16, paddingBottom: 48 },

@@ -1,24 +1,28 @@
 import { INFO_MONEDA, type Moneda } from './moneda';
 
 /*
- * La tasa de una transferencia se expresa como la gente la dice: bolívares por
- * cada dólar/USDT cuando interviene el bolívar ("vendí a 150"), o unidades de
- * destino por unidad de origen en el resto de casos (USD ↔ USDT).
+ * La tasa de un cambio se expresa como la gente la dice: cuánto de la moneda
+ * "débil" vale una unidad de la "fuerte". Bolívares por dólar o por euro
+ * ("vendí a 150"), dólares por euro (1,15), y destino por origen entre USD y
+ * USDT.
  */
 
-export function hayBolivar(origen: Moneda, destino: Moneda): boolean {
-  return origen === 'BS' || destino === 'BS';
+const FUERZA: Record<Moneda, number> = { BS: 0, USD: 1, USDT: 1, EUR: 2 };
+
+/** La tasa se da por unidad del destino (el origen es la moneda débil). */
+function porUnidadDeDestino(origen: Moneda, destino: Moneda): boolean {
+  return FUERZA[origen] < FUERZA[destino];
 }
 
 /** Tasa implícita a partir de lo enviado y lo recibido (ambos en céntimos). */
 export function calcularTasa(origen: Moneda, destino: Moneda, enviado: number, recibido: number): number {
-  if (origen === 'BS' && destino !== 'BS') return enviado / recibido;
+  if (porUnidadDeDestino(origen, destino)) return enviado / recibido;
   return recibido / enviado;
 }
 
 /** Monto recibido en céntimos a partir de lo enviado y la tasa. */
 export function recibidoConTasa(origen: Moneda, destino: Moneda, enviado: number, tasa: number): number {
-  if (origen === 'BS' && destino !== 'BS') return Math.round(enviado / tasa);
+  if (porUnidadDeDestino(origen, destino)) return Math.round(enviado / tasa);
   return Math.round(enviado * tasa);
 }
 
@@ -42,10 +46,10 @@ export function tasaATexto(tasa: number): string {
   return tasa.toFixed(decimales).replace(/\.?0+$/, '').replace('.', ',');
 }
 
-/** Etiqueta de la tasa según el par, p. ej. "Bs. por USDT". */
+/** Etiqueta de la tasa según el par, p. ej. "Bs. por USDT" o "USD por €". */
 export function unidadTasa(origen: Moneda, destino: Moneda): string {
   const corto = (m: Moneda) => INFO_MONEDA[m].corto;
-  if (origen === 'BS' && destino !== 'BS') return `${corto('BS')} por ${corto(destino)}`;
+  if (porUnidadDeDestino(origen, destino)) return `${corto(origen)} por ${corto(destino)}`;
   return `${corto(destino)} por ${corto(origen)}`;
 }
 

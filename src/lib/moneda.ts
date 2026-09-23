@@ -1,18 +1,29 @@
 // Todos los montos se guardan como enteros en céntimos para evitar errores de
 // redondeo de punto flotante al sumar saldos. Solo las tasas de cambio son REAL.
 
-export type Moneda = 'USD' | 'BS' | 'USDT';
+export type Moneda = 'USD' | 'BS' | 'USDT' | 'EUR';
 
-export const MONEDAS: readonly Moneda[] = ['USD', 'BS', 'USDT'];
+export const MONEDAS: readonly Moneda[] = ['USD', 'BS', 'USDT', 'EUR'];
 
 export const INFO_MONEDA: Record<Moneda, { nombre: string; corto: string }> = {
   USD: { nombre: 'Dólares', corto: 'USD' },
   BS: { nombre: 'Bolívares', corto: 'Bs.' },
   USDT: { nombre: 'Tether (USDT)', corto: 'USDT' },
+  EUR: { nombre: 'Euros', corto: '€' },
 };
 
 export function esMoneda(valor: unknown): valor is Moneda {
   return typeof valor === 'string' && (MONEDAS as readonly string[]).includes(valor);
+}
+
+/** USD y USDT: se toman como la misma moneda (1:1). */
+export function esDolar(m: Moneda): boolean {
+  return m === 'USD' || m === 'USDT';
+}
+
+/** Monedas que se cambian 1:1 entre sí (iguales, o USD ↔ USDT). */
+export function equivalentes(a: Moneda, b: Moneda): boolean {
+  return a === b || (esDolar(a) && esDolar(b));
 }
 
 /** Formato venezolano: punto para miles y coma para decimales. */
@@ -26,7 +37,7 @@ export function formatearNumero(centimos: number): string {
   return `${negativo ? '-' : ''}${entero},${decimales}`;
 }
 
-/** El signo va siempre delante: "-Bs. 350,00", "-$25,50", "-3,00 USDT". */
+/** El signo va siempre delante: "-Bs. 350,00", "-$25,50", "-3,00 USDT", "-12,00 €". */
 export function formatearMonto(centimos: number, moneda: Moneda): string {
   const numero = formatearNumero(Math.abs(centimos));
   const signo = centimos < 0 ? '-' : '';
@@ -37,6 +48,8 @@ export function formatearMonto(centimos: number, moneda: Moneda): string {
       return `${signo}Bs. ${numero}`;
     case 'USDT':
       return `${signo}${numero} USDT`;
+    case 'EUR':
+      return `${signo}${numero} €`;
   }
 }
 
@@ -47,7 +60,7 @@ export function formatearMonto(centimos: number, moneda: Moneda): string {
  * una sola vez, es decimal. Devuelve null si el texto no es un número válido.
  */
 export function parsearMonto(texto: string): number | null {
-  let limpio = texto.replace(/[\s$]|Bs\.?|USDT?/gi, '');
+  let limpio = texto.replace(/[\s$€]|Bs\.?|USDT?|EUR/gi, '');
   let negativo = false;
   if (limpio.startsWith('-')) {
     negativo = true;

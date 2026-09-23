@@ -88,9 +88,9 @@ test('validaciones, resumen, eliminar y respaldo', async () => {
   assert.equal((await obtenerDeuda(db, noIndexada))!.unidad, 'BS');
   await crearDeuda(db, { tipo: 'DEBO', persona: 'Luis', moneda: 'USDT', monto: 700, fecha: hoy });
 
-  const r = resumenDeudas(await listarDeudas(db), 1000);
+  const r = resumenDeudas(await listarDeudas(db), { dolar: 1000, euro: null });
   assert.deepEqual(r, { meDeben: 100, debo: 700, completo: true });
-  assert.equal(resumenDeudas(await listarDeudas(db), null).completo, false);
+  assert.equal(resumenDeudas(await listarDeudas(db), { dolar: null, euro: null }).completo, false);
 
   const copia = JSON.parse(JSON.stringify(await exportarDatos(db)));
   const otra = await crearBdMemoria();
@@ -165,4 +165,28 @@ test('editar una deuda con pagos', async () => {
   d = (await obtenerDeuda(db, id))!;
   assert.equal(d.total, 1000);
   assert.equal(d.cerrada, true);
+});
+
+test('deudas y pagos en euros', async () => {
+  const { db, efectivo, saldo } = await preparar();
+  const base = { icono: 'wallet', color_hex: '#000000' };
+  const euros = await crearBilletera(db, { ...base, nombre: 'Euros', moneda: 'EUR', balance_inicial: 10000 });
+  // Me prestaron €50 en efectivo.
+  const id = await crearDeuda(db, { tipo: 'DEBO', persona: 'Universidad', moneda: 'EUR', monto: 5000, fecha: hoy, billetera_id: euros });
+  assert.equal(await saldo(euros), 15000);
+  let d = (await obtenerDeuda(db, id))!;
+  assert.equal(d.unidad, 'EUR');
+  // Pago $23 que equivalen a €20.
+  await registrarPagoDeuda(db, { deuda_id: id, billetera_id: efectivo, monto: 2300, monto_unidad: 2000, fecha: hoy });
+  d = (await obtenerDeuda(db, id))!;
+  assert.equal(d.pendiente, 3000);
+  assert.equal((await listarMovimientos(db, { deudaId: id }))[0].tasa_cambio, 1.15);
+  // Resumen en dólares con el euro de la referencia.
+  const r = resumenDeudas([d], { dolar: 850, euro: 977.5 });
+  assert.equal(r.debo, 3450);
+  // Con pagos no se puede pasar la deuda a dólares.
+  await assert.rejects(
+    actualizarDeuda(db, id, { tipo: 'DEBO', persona: 'Universidad', moneda: 'USD', monto: 5000, fecha: hoy }),
+    /euros/,
+  );
 });

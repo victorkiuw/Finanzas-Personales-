@@ -1,16 +1,27 @@
 // Cliente de ve.dolarapi.com. Respuesta de /v1/dolares (se verificó con el código de la API):
 // [{ "moneda": "USD", "fuente": "oficial", "promedio": 852.41, "fechaActualizacion": "2026-09-22T00:00:00-04:00", ... },
 //  { "moneda": "USD", "fuente": "paralelo", "promedio": 952.36, "fechaActualizacion": "2026-09-22T20:01:15.941Z", ... }]
+// /v1/euros responde igual con "moneda": "EUR" (de ahí se toma solo el oficial del BCV).
 
 export const URL_TASAS = 'https://ve.dolarapi.com/v1/dolares';
+export const URL_EUROS = 'https://ve.dolarapi.com/v1/euros';
 export const TIEMPO_ESPERA_MS = 10_000;
 
-/** BCV = dólar oficial; PARALELO = dólar paralelo, que la app usa como tasa de mercado / USDT. */
-export type Par = 'BCV' | 'PARALELO';
+/**
+ * BCV = dólar oficial; PARALELO = dólar paralelo, que la app muestra como "USDT"
+ * (tasa de mercado); EURO = euro oficial del BCV.
+ */
+export type Par = 'BCV' | 'PARALELO' | 'EURO';
 
-export const PARES: readonly Par[] = ['BCV', 'PARALELO'];
+/** Tasas del dólar que se pueden elegir como referencia para convertir. */
+export type ParDolar = 'BCV' | 'PARALELO';
 
-export const NOMBRE_PAR: Record<Par, string> = { BCV: 'BCV', PARALELO: 'Paralelo' };
+export const PARES: readonly ParDolar[] = ['BCV', 'PARALELO'];
+
+/** Todas las tasas que se consultan y guardan. */
+export const TODOS_LOS_PARES: readonly Par[] = ['BCV', 'PARALELO', 'EURO'];
+
+export const NOMBRE_PAR: Record<Par, string> = { BCV: 'BCV', PARALELO: 'USDT', EURO: 'Euro BCV' };
 
 export interface TasaConsultada {
   /** Bolívares por dólar. */
@@ -19,7 +30,14 @@ export interface TasaConsultada {
   fecha: string;
 }
 
-const FUENTES: Record<string, Par> = { oficial: 'BCV', paralelo: 'PARALELO' };
+/** Par según moneda y fuente de la API; el euro paralelo no se usa. */
+function parDe(moneda: unknown, fuente: unknown): Par | undefined {
+  if (typeof fuente !== 'string') return undefined;
+  const f = fuente.toLowerCase();
+  if (moneda === 'EUR') return f === 'oficial' ? 'EURO' : undefined;
+  if (moneda !== undefined && moneda !== 'USD') return undefined;
+  return f === 'oficial' ? 'BCV' : f === 'paralelo' ? 'PARALELO' : undefined;
+}
 
 export class ErrorTasas extends Error {}
 
@@ -30,8 +48,7 @@ export function parsearRespuesta(json: unknown): Partial<Record<Par, TasaConsult
   for (const item of json) {
     if (!item || typeof item !== 'object') continue;
     const { moneda, fuente, promedio, venta, compra, fechaActualizacion } = item as Record<string, unknown>;
-    if (moneda !== undefined && moneda !== 'USD') continue;
-    const par = typeof fuente === 'string' ? FUENTES[fuente.toLowerCase()] : undefined;
+    const par = parDe(moneda, fuente);
     if (!par) continue;
     const tasa = [promedio, venta, compra].find((v): v is number => typeof v === 'number' && v > 0);
     if (!tasa) continue;
@@ -63,14 +80,22 @@ async function obtenerJson(url: string, fetchFn: Fetch, tiempoEspera: number): P
   }
 }
 
+/** Dólares y euro. Si solo falla el euro, se devuelven los dólares igual. */
 export async function consultarTasas(
   fetchFn: Fetch = fetch,
   tiempoEspera = TIEMPO_ESPERA_MS,
 ): Promise<Partial<Record<Par, TasaConsultada>>> {
-  return parsearRespuesta(await obtenerJson(URL_TASAS, fetchFn, tiempoEspera));
+  const [dolares, euros] = await Promise.all([
+    obtenerJson(URL_TASAS, fetchFn, tiempoEspera).then(parsearRespuesta),
+    obtenerJson(URL_EUROS, fetchFn, tiempoEspera)
+      .then(parsearRespuesta)
+      .catch(() => ({})),
+  ]);
+  return { ...dolares, ...euros };
 }
 
 export const URL_HISTORICO = 'https://ve.dolarapi.com/v1/historicos/dolares';
+export const URL_HISTORICO_EURO = 'https://ve.dolarapi.com/v1/historicos/euros/oficial';
 
 export interface TasaDiaria {
   par: Par;
@@ -88,8 +113,8 @@ export function parsearHistorico(json: unknown): TasaDiaria[] {
   const tasas: TasaDiaria[] = [];
   for (const item of json) {
     if (!item || typeof item !== 'object') continue;
-    const { fuente, promedio, venta, compra, fecha } = item as Record<string, unknown>;
-    const par = typeof fuente === 'string' ? FUENTES[fuente.toLowerCase()] : undefined;
+    const { moneda, fuente, promedio, venta, compra, fecha } = item as Record<string, unknown>;
+    const par = parDe(moneda, fuente);
     const tasa = [promedio, venta, compra].find((v): v is number => typeof v === 'number' && v > 0);
     if (!par || !tasa || typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue;
     tasas.push({ par, dia: fecha, tasa });
@@ -97,6 +122,13 @@ export function parsearHistorico(json: unknown): TasaDiaria[] {
   return tasas;
 }
 
+/** Histórico del dólar y del euro oficial; si solo falla el del euro, se devuelve el del dólar. */
 export async function consultarHistorico(fetchFn: Fetch = fetch, tiempoEspera = 20_000): Promise<TasaDiaria[]> {
-  return parsearHistorico(await obtenerJson(URL_HISTORICO, fetchFn, tiempoEspera));
+  const [dolares, euros] = await Promise.all([
+    obtenerJson(URL_HISTORICO, fetchFn, tiempoEspera).then(parsearHistorico),
+    obtenerJson(URL_HISTORICO_EURO, fetchFn, tiempoEspera)
+      .then(parsearHistorico)
+      .catch(() => []),
+  ]);
+  return [...dolares, ...euros];
 }

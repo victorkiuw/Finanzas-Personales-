@@ -5,8 +5,8 @@ import { Button, Chip, Dialog, HelperText, Portal, Text, TextInput } from 'react
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import { registrarPagoDeuda, type Deuda } from '../db/deudas';
-import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
+import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
@@ -57,7 +57,7 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
   const a = deuda.unidad;
   // USD y USDT se toman 1:1; con bolívares de por medio hace falta una tasa.
   const conCambio = billetera !== null && de !== a;
-  const tasaPorDefecto = conCambio && !hayBolivar(de, a) ? 1 : null;
+  const tasaPorDefecto = conCambio && equivalentes(de, a) ? 1 : null;
   const tasa = parsearTasa(tasaTexto) ?? tasaPorDefecto;
   const monto = parsearMonto(montoTexto);
   const equivalente = !conCambio

@@ -52,7 +52,7 @@ test('valida los datos', async () => {
   await assert.rejects(crearBilletera(db, { ...efectivo, nombre: '   ' }), ErrorValidacion);
   await assert.rejects(crearBilletera(db, { ...efectivo, nombre: 'x'.repeat(41) }), ErrorValidacion);
   await assert.rejects(
-    crearBilletera(db, { ...efectivo, moneda: 'EUR' as never }),
+    crearBilletera(db, { ...efectivo, moneda: 'GBP' as never }),
     ErrorValidacion,
   );
   await assert.rejects(crearBilletera(db, { ...efectivo, balance_inicial: 1.5 }), ErrorValidacion);

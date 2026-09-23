@@ -1,3 +1,4 @@
+import type { Moneda } from '../lib/moneda';
 import { ErrorValidacion } from './billeteras';
 import { crearMovimiento } from './movimientos';
 import type { BaseDatos } from './tipos';
@@ -30,7 +31,7 @@ export interface Recurrente {
   automatico: boolean;
   activo: boolean;
   billetera_nombre: string;
-  billetera_moneda: 'USD' | 'BS' | 'USDT';
+  billetera_moneda: Moneda;
   categoria_icono: string;
   categoria_color: string;
 }

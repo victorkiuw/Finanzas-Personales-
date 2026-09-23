@@ -1,6 +1,7 @@
-import { convertir } from '../lib/conversion';
+import { convertir, type Cambio } from '../lib/conversion';
 import { claveDia } from '../lib/fechas';
-import type { Moneda } from '../lib/moneda';
+import { equivalentes, type Moneda } from '../lib/moneda';
+import { euroSegun } from './tasas';
 import type { BaseDatos } from './tipos';
 
 /*
@@ -33,36 +34,56 @@ export async function filasDeReporte(db: BaseDatos, desde: string, hasta: string
   );
 }
 
-/** Busca la tasa de un día en el historial (ordenado por día). */
+type Historial = { dia: string; tasa: number }[];
+
+/** Última tasa conocida en o antes del día; si el día es anterior a todo el historial, la más antigua. */
+function buscarTasa(h: Historial, dia: string): number | null {
+  if (h.length === 0) return null;
+  let lo = 0;
+  let hi = h.length - 1;
+  let encontrada = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (h[mid].dia <= dia) {
+      encontrada = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return h[Math.max(encontrada, 0)].tasa;
+}
+
+/** Historiales para convertir euros: el del euro BCV y el del dólar BCV (para la relación euro/dólar). */
+export interface HistorialEuro {
+  euro: Historial;
+  bcv: Historial;
+}
+
+/** Busca las tasas de un día en el historial (ordenado por día). */
 export class Conversor {
   constructor(
-    private readonly historial: { dia: string; tasa: number }[],
-    /** Tasa a usar si el historial está vacío (normalmente la vigente). */
+    private readonly historial: Historial,
+    /** Tasas a usar si el historial está vacío (normalmente las vigentes). */
     private readonly respaldo: number | null,
+    private readonly historialEuro: HistorialEuro | null = null,
+    private readonly respaldoEuro: number | null = null,
   ) {}
 
-  /** Última tasa conocida en o antes del día; si el día es anterior a todo el historial, la más antigua. */
+  /** Bs. por dólar (según la referencia) del día. */
   tasaDelDia(dia: string): number | null {
-    const h = this.historial;
-    if (h.length === 0) return this.respaldo;
-    let lo = 0;
-    let hi = h.length - 1;
-    let encontrada = -1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      if (h[mid].dia <= dia) {
-        encontrada = mid;
-        lo = mid + 1;
-      } else hi = mid - 1;
-    }
-    return h[Math.max(encontrada, 0)].tasa;
+    return buscarTasa(this.historial, dia) ?? this.respaldo;
+  }
+
+  cambioDelDia(dia: string): Cambio {
+    const dolar = this.tasaDelDia(dia);
+    const h = this.historialEuro;
+    const euro = h ? euroSegun(dolar, buscarTasa(h.bcv, dia), buscarTasa(h.euro, dia)) : null;
+    return { dolar, euro: euro ?? this.respaldoEuro };
   }
 
   /** Convierte a la moneda base; null si hace falta una tasa y no hay ninguna. */
   aBase(monto: number, moneda: Moneda, base: Moneda, fechaIso: string): number | null {
-    if (moneda === base || (moneda !== 'BS' && base !== 'BS')) return convertir(monto, moneda, base, 1);
-    const tasa = this.tasaDelDia(claveDia(fechaIso));
-    return tasa ? convertir(monto, moneda, base, tasa) : null;
+    if (equivalentes(moneda, base)) return monto;
+    return convertir(monto, moneda, base, this.cambioDelDia(claveDia(fechaIso)));
   }
 }
 
@@ -147,16 +168,17 @@ export function totalesPorMes(
 export interface PuntoPatrimonio {
   /** "AAAA-MM". */
   mes: string;
-  /** Patrimonio al cierre del mes (billeteras + metas), en la moneda base. */
+  /** Disponible al cierre del mes (billeteras que cuentan en el total), en la moneda base. */
   total: number;
-  /** Faltó una tasa para convertir lo que había en Bs. */
+  /** Faltó una tasa para convertir lo que había en otra moneda. */
   incompleto: boolean;
 }
 
 /**
- * Patrimonio al cierre de cada mes: saldos iniciales más todos los movimientos
- * hasta esa fecha, por moneda, convertidos con la tasa del último día del mes.
- * Las metas cuentan como parte del patrimonio (igual que en el resumen).
+ * Disponible al cierre de cada mes: saldos iniciales más todos los movimientos
+ * hasta esa fecha, por moneda, convertidos con las tasas del último día del mes.
+ * Igual que el total de Inicio, no cuenta lo ahorrado en metas ni las
+ * billeteras marcadas para no contar en el total.
  */
 export async function patrimonioPorMes(
   db: BaseDatos,
@@ -165,20 +187,19 @@ export async function patrimonioPorMes(
   base: Moneda,
 ): Promise<PuntoPatrimonio[]> {
   const iniciales = await db.getAllAsync<{ moneda: Moneda; total: number }>(
-    `SELECT moneda, SUM(balance_inicial) AS total FROM billeteras GROUP BY moneda`,
+    `SELECT moneda, SUM(balance_inicial) AS total FROM billeteras WHERE en_total = 1 GROUP BY moneda`,
     [],
   );
-  // Cada movimiento como cambios por moneda: lo que sale/entra de billeteras y metas.
+  // Cada movimiento como cambio por moneda en las billeteras que cuentan.
   const cambios = await db.getAllAsync<{ fecha: string; moneda: Moneda; delta: number }>(
     `SELECT t.fecha, o.moneda,
        CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA') THEN t.monto ELSE -t.monto END AS delta
      FROM transacciones t JOIN billeteras o ON o.id = t.billetera_origen_id
+     WHERE o.en_total = 1
      UNION ALL
      SELECT t.fecha, d.moneda, t.monto_destino
-     FROM transacciones t JOIN billeteras d ON d.id = t.billetera_destino_id WHERE t.tipo = 'TRANSFERENCIA'
-     UNION ALL
-     SELECT t.fecha, m.moneda, CASE WHEN t.tipo = 'APORTE_META' THEN t.monto_destino ELSE -t.monto_destino END
-     FROM transacciones t JOIN metas_ahorro m ON m.id = t.meta_id
+     FROM transacciones t JOIN billeteras d ON d.id = t.billetera_destino_id
+     WHERE t.tipo = 'TRANSFERENCIA' AND d.en_total = 1
      ORDER BY 1`,
     [],
   );

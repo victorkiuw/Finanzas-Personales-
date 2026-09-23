@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Avatar, Card, Text, useTheme } from 'react-native-paper';
+import { Avatar, Card, IconButton, Text, useTheme } from 'react-native-paper';
 
 import type { Billetera } from '../db/billeteras';
 import { formatearMonto, INFO_MONEDA } from '../lib/moneda';
@@ -12,13 +13,16 @@ interface Props {
 export function TarjetaBilletera({ billetera, onPress }: Props) {
   const tema = useTheme();
   const negativo = billetera.saldo < 0;
+  // Las billeteras guardadas aparte muestran el saldo oculto hasta tocar el ojo.
+  const [ver, setVer] = useState(false);
+  const oculta = !billetera.en_total && !ver;
 
   return (
     <Card
       mode="contained"
       onPress={onPress}
       style={[styles.tarjeta, billetera.archivada && styles.archivada]}
-      accessibilityLabel={`${billetera.nombre}, ${formatearMonto(billetera.saldo, billetera.moneda)}`}
+      accessibilityLabel={`${billetera.nombre}, ${oculta ? 'saldo oculto' : formatearMonto(billetera.saldo, billetera.moneda)}`}
     >
       <Card.Content style={styles.contenido}>
         <Avatar.Icon
@@ -34,6 +38,7 @@ export function TarjetaBilletera({ billetera, onPress }: Props) {
           <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
             {INFO_MONEDA[billetera.moneda].nombre}
             {billetera.archivada ? ' · Archivada' : ''}
+            {!billetera.en_total ? ' · Aparte, no suma al total' : ''}
           </Text>
         </View>
         <Text
@@ -41,8 +46,17 @@ export function TarjetaBilletera({ billetera, onPress }: Props) {
           style={[styles.saldo, negativo && { color: tema.colors.error }]}
           numberOfLines={1}
         >
-          {formatearMonto(billetera.saldo, billetera.moneda)}
+          {oculta ? '••••••' : formatearMonto(billetera.saldo, billetera.moneda)}
         </Text>
+        {!billetera.en_total && (
+          <IconButton
+            icon={ver ? 'eye-off-outline' : 'eye-outline'}
+            size={20}
+            onPress={() => setVer((v) => !v)}
+            accessibilityLabel={ver ? 'Ocultar saldo' : 'Ver saldo'}
+            style={styles.ojo}
+          />
+        )}
       </Card.Content>
     </Card>
   );
@@ -54,4 +68,5 @@ const styles = StyleSheet.create({
   contenido: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   textos: { flex: 1 },
   saldo: { fontVariant: ['tabular-nums'], fontWeight: '600' },
+  ojo: { margin: 0 },
 });

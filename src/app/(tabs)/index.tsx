@@ -26,6 +26,7 @@ import {
   type PuntoPatrimonio,
   totalesPorMes,
   type FilaReporte,
+  type HistorialEuro,
 } from '../../db/reportes';
 import { listarHistorial } from '../../db/tasas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
@@ -47,6 +48,7 @@ interface Datos {
   recientes: Movimiento[];
   filas: FilaReporte[];
   historial: { dia: string; tasa: number }[];
+  historialEuro: HistorialEuro;
   presupuestos: Presupuesto[];
   categorias: Categoria[];
   pendientes: Recurrente[];
@@ -58,7 +60,9 @@ interface Datos {
 export default function PantallaInicio() {
   const db = useSQLiteContext();
   const tema = useTheme();
-  const { tasas, referencia, monedaBase, versionHistorial } = useTasas();
+  const { cambio, referencia, monedaBase, versionHistorial } = useTasas();
+  // Billeteras "guardadas aparte" cuyo saldo se destapó tocándolas.
+  const [visibles, setVisibles] = useState<Set<number>>(() => new Set());
   // Primer día del mes que se está viendo.
   const [mes, setMes] = useState(() => {
     const hoy = new Date();
@@ -72,24 +76,29 @@ export default function PantallaInicio() {
     const { pendientes } = await procesarRecurrentes(db);
     const desde = rangoMes(mes, -(MESES_GRAFICO - 1)).desde;
     const hasta = rangoMes(mes).hasta;
-    const [billeteras, metas, recientes, filas, historial, presupuestos, categorias] = await Promise.all([
-      listarBilleteras(db),
-      listarMetas(db),
-      listarMovimientos(db, { limite: 5 }),
-      filasDeReporte(db, desde, hasta),
-      listarHistorial(db, referencia),
-      listarPresupuestos(db),
-      listarCategorias(db, 'GASTO', { incluirArchivadas: true }),
-    ]);
-    // Patrimonio al cierre de los últimos 12 meses hasta el mes que se está viendo.
+    const [billeteras, metas, recientes, filas, historial, historialEuroBcv, historialBcv, presupuestos, categorias] =
+      await Promise.all([
+        listarBilleteras(db),
+        listarMetas(db),
+        listarMovimientos(db, { limite: 5 }),
+        filasDeReporte(db, desde, hasta),
+        listarHistorial(db, referencia),
+        listarHistorial(db, 'EURO'),
+        listarHistorial(db, 'BCV'),
+        listarPresupuestos(db),
+        listarCategorias(db, 'GASTO', { incluirArchivadas: true }),
+      ]);
+    const historialEuro = { euro: historialEuroBcv, bcv: historialBcv };
+    // Disponible al cierre de los últimos 12 meses hasta el mes que se está viendo.
     const meses12 = Array.from({ length: 12 }, (_, i) => claveMes(new Date(mes.getFullYear(), mes.getMonth() - 11 + i, 1)));
-    const patrimonio = await patrimonioPorMes(db, meses12, new Conversor(historial, tasas[referencia]?.tasa ?? null), monedaBase);
+    const conversor = new Conversor(historial, cambio.dolar, historialEuro, cambio.euro);
+    const patrimonio = await patrimonioPorMes(db, meses12, conversor, monedaBase);
     const sinExportar = await diasSinExportar(db);
     // Mantiene al día el widget de la pantalla de inicio (si el usuario lo agregó).
     actualizarWidget(db).catch(() => {});
-    setDatos({ billeteras, metas, recientes, filas, historial, presupuestos, categorias, pendientes, patrimonio, sinExportar });
+    setDatos({ billeteras, metas, recientes, filas, historial, historialEuro, presupuestos, categorias, pendientes, patrimonio, sinExportar });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
-  }, [db, mes, referencia, versionHistorial, monedaBase, tasas]);
+  }, [db, mes, referencia, versionHistorial, monedaBase, cambio.dolar, cambio.euro]);
 
   useFocusEffect(
     useCallback(() => {
@@ -99,7 +108,7 @@ export default function PantallaInicio() {
 
   const reporte = useMemo(() => {
     if (!datos) return null;
-    const conversor = new Conversor(datos.historial, tasas[referencia]?.tasa ?? null);
+    const conversor = new Conversor(datos.historial, cambio.dolar, datos.historialEuro, cambio.euro);
     const clave = claveMes(mes);
     const delMes = datos.filas.filter((f) => claveDia(f.fecha).startsWith(clave));
     const meses = Array.from({ length: MESES_GRAFICO }, (_, i) => new Date(mes.getFullYear(), mes.getMonth() - (MESES_GRAFICO - 1) + i, 1));
@@ -109,7 +118,7 @@ export default function PantallaInicio() {
       porMes: totalesPorMes(datos.filas, conversor, monedaBase, meses.map(claveMes)),
       etiquetas: meses.map((d) => MESES_CORTOS[d.getMonth()]),
     };
-  }, [datos, mes, monedaBase, referencia, tasas]);
+  }, [datos, mes, monedaBase, cambio.dolar, cambio.euro]);
 
   if (!datos || !reporte) return <ActivityIndicator style={styles.cargando} />;
 
@@ -154,29 +163,33 @@ export default function PantallaInicio() {
         <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carrusel}>
-          {datos.billeteras.map((b) => (
-            <Pressable
-              key={b.id}
-              onPress={() => router.push(`/billetera/${b.id}`)}
-              style={[styles.miniTarjeta, { backgroundColor: tema.colors.surfaceVariant }]}
-              accessibilityRole="button"
-              accessibilityLabel={`${b.nombre}, ${formatearMonto(b.saldo, b.moneda)}`}
-            >
-              <View style={styles.filaMini}>
-                <Avatar.Icon size={24} icon={b.icono} color="#FFFFFF" style={{ backgroundColor: b.color_hex }} />
-                <Text variant="labelLarge" numberOfLines={1} style={styles.flex}>
-                  {b.nombre}
-                </Text>
-              </View>
-              <Text
-                variant="titleMedium"
-                style={[styles.cifra, b.saldo < 0 && { color: tema.colors.error }]}
-                numberOfLines={1}
+          {datos.billeteras.map((b) => {
+            const oculta = !b.en_total && !visibles.has(b.id);
+            return (
+              <Pressable
+                key={b.id}
+                // Una billetera guardada aparte primero se destapa; el segundo toque la abre.
+                onPress={() => (oculta ? setVisibles((v) => new Set(v).add(b.id)) : router.push(`/billetera/${b.id}`))}
+                style={[styles.miniTarjeta, { backgroundColor: tema.colors.surfaceVariant }]}
+                accessibilityRole="button"
+                accessibilityLabel={oculta ? `${b.nombre}, saldo oculto. Toca para verlo` : `${b.nombre}, ${formatearMonto(b.saldo, b.moneda)}`}
               >
-                {formatearMonto(b.saldo, b.moneda)}
-              </Text>
-            </Pressable>
-          ))}
+                <View style={styles.filaMini}>
+                  <Avatar.Icon size={24} icon={b.icono} color="#FFFFFF" style={{ backgroundColor: b.color_hex }} />
+                  <Text variant="labelLarge" numberOfLines={1} style={styles.flex}>
+                    {b.nombre}
+                  </Text>
+                </View>
+                <Text
+                  variant="titleMedium"
+                  style={[styles.cifra, b.saldo < 0 && { color: tema.colors.error }]}
+                  numberOfLines={1}
+                >
+                  {oculta ? '••••••' : formatearMonto(b.saldo, b.moneda)}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
         <View style={styles.seccion}>
@@ -246,14 +259,14 @@ export default function PantallaInicio() {
           </Card>
 
           <Card mode="outlined">
-            <Card.Title title="Evolución del patrimonio" subtitle="Al cierre de cada mes · desliza para ver cada uno" />
+            <Card.Title title="Evolución de lo disponible" subtitle="Al cierre de cada mes, sin metas ni billeteras aparte" subtitleNumberOfLines={2} />
             <Card.Content>
               <GraficoLineas
                 etiquetas={datos.patrimonio.map((p) => {
                   const [a, m] = p.mes.split('-').map(Number);
                   return `${MESES_CORTOS[m - 1]} ${a}`;
                 })}
-                series={[{ nombre: 'Patrimonio', color: colores.ingresos, valores: datos.patrimonio.map((p) => (p.incompleto ? null : p.total)) }]}
+                series={[{ nombre: 'Disponible', color: colores.ingresos, valores: datos.patrimonio.map((p) => (p.incompleto ? null : p.total)) }]}
                 formatear={(v) => formatearMonto(Math.round(v), monedaBase)}
               />
             </Card.Content>

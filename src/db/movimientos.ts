@@ -1,4 +1,4 @@
-import { parsearMonto, type Moneda } from '../lib/moneda';
+import { esDolar, parsearMonto, type Moneda } from '../lib/moneda';
 import { calcularTasa } from '../lib/tasa';
 import { ErrorValidacion } from './billeteras';
 import { categoriaComisiones } from './categorias';
@@ -330,11 +330,11 @@ export function efectoEnBilletera(m: Movimiento, billeteraId: number): number {
 }
 
 /**
- * Tasa de la última transferencia entre esas dos monedas (en cualquier sentido
- * si interviene el bolívar, porque la tasa se expresa igual: Bs. por dólar).
+ * Tasa de la última transferencia entre esas dos monedas (en cualquier sentido,
+ * salvo entre USD y USDT, porque la tasa se expresa igual: Bs. por dólar, $ por €).
  */
 export async function ultimaTasa(db: BaseDatos, de: Moneda, a: Moneda): Promise<number | null> {
-  const ambosSentidos = de === 'BS' || a === 'BS' ? 1 : 0;
+  const ambosSentidos = esDolar(de) && esDolar(a) ? 0 : 1;
   const f = await db.getFirstAsync<{ tasa_cambio: number }>(
     `SELECT t.tasa_cambio FROM transacciones t
      JOIN billeteras o ON o.id = t.billetera_origen_id

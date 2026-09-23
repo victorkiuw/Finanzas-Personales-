@@ -18,6 +18,8 @@ export interface Billetera {
   comision_minima: number;
   /** % sobre la tasa BCV al que el banco vende/compra divisas; null si no se usa. */
   margen_cambio: number | null;
+  /** Si su saldo se suma al total disponible (Binance como ahorro discreto, no). */
+  en_total: boolean;
 }
 
 export interface DatosBilletera {
@@ -29,19 +31,21 @@ export interface DatosBilletera {
   comision_porcentaje?: number;
   comision_minima?: number;
   margen_cambio?: number | null;
+  en_total?: boolean;
 }
 
 export const LARGO_MAXIMO_NOMBRE = 40;
 
 export class ErrorValidacion extends Error {}
 
-interface FilaBilletera extends Omit<Billetera, 'archivada'> {
+interface FilaBilletera extends Omit<Billetera, 'archivada' | 'en_total'> {
   archivada: number;
+  en_total: number;
 }
 
 const SELECT_CON_SALDO = `
   SELECT b.id, b.nombre, b.moneda, b.balance_inicial, b.icono, b.color_hex, b.archivada,
-    b.comision_porcentaje, b.comision_minima, b.margen_cambio,
+    b.comision_porcentaje, b.comision_minima, b.margen_cambio, b.en_total,
     b.balance_inicial
     + COALESCE((
         SELECT SUM(CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA')
@@ -54,7 +58,7 @@ const SELECT_CON_SALDO = `
   FROM billeteras b`;
 
 function aBilletera(fila: FilaBilletera): Billetera {
-  return { ...fila, archivada: fila.archivada === 1 };
+  return { ...fila, archivada: fila.archivada === 1, en_total: fila.en_total === 1 };
 }
 
 function validar(datos: DatosBilletera): DatosBilletera {
@@ -79,7 +83,7 @@ function validar(datos: DatosBilletera): DatosBilletera {
   if (margen_cambio !== null && !(margen_cambio >= -50 && margen_cambio <= 100)) {
     throw new ErrorValidacion('El margen del banco debe estar entre -50 % y 100 %.');
   }
-  return { ...datos, nombre, comision_porcentaje, comision_minima, margen_cambio };
+  return { ...datos, nombre, comision_porcentaje, comision_minima, margen_cambio, en_total: datos.en_total ?? true };
 }
 
 export async function listarBilleteras(
@@ -103,9 +107,9 @@ export async function crearBilletera(db: BaseDatos, datos: DatosBilletera): Prom
   const d = validar(datos);
   const r = await db.runAsync(
     `INSERT INTO billeteras
-       (nombre, moneda, balance_inicial, icono, color_hex, comision_porcentaje, comision_minima, margen_cambio)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!, d.margen_cambio!],
+       (nombre, moneda, balance_inicial, icono, color_hex, comision_porcentaje, comision_minima, margen_cambio, en_total)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!, d.margen_cambio!, d.en_total ? 1 : 0],
   );
   return r.lastInsertRowId;
 }
@@ -135,8 +139,8 @@ export async function actualizarBilletera(
   }
   await db.runAsync(
     `UPDATE billeteras SET nombre = ?, moneda = ?, balance_inicial = ?, icono = ?, color_hex = ?,
-       comision_porcentaje = ?, comision_minima = ?, margen_cambio = ? WHERE id = ?`,
-    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!, d.margen_cambio!, id],
+       comision_porcentaje = ?, comision_minima = ?, margen_cambio = ?, en_total = ? WHERE id = ?`,
+    [d.nombre, d.moneda, d.balance_inicial, d.icono, d.color_hex, d.comision_porcentaje!, d.comision_minima!, d.margen_cambio!, d.en_total ? 1 : 0, id],
   );
 }
 

@@ -172,7 +172,7 @@ export default function PantallaAjustes() {
         />
         <List.Item
           title="Alertas de tasa"
-          description="Si el paralelo sube mucho o la brecha con el BCV se dispara"
+          description="Si el USDT sube mucho o la brecha con el BCV se dispara"
           left={(p) => <List.Icon {...p} icon="bell-alert" />}
           right={(p) => <List.Icon {...p} icon="chevron-right" />}
           onPress={() => router.push('/alertas')}

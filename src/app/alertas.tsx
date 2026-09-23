@@ -90,16 +90,16 @@ export default function PantallaAlertas() {
     <ScrollView contentContainerStyle={styles.contenido}>
       <Stack.Screen options={{ title: 'Alertas de tasa' }} />
       <Fila
-        titulo="Subida del paralelo"
-        descripcion="Avisarme si el paralelo sube este porcentaje o más respecto al día anterior."
+        titulo="Subida del USDT"
+        descripcion="Avisarme si el USDT sube este porcentaje o más respecto al día anterior."
         activo={subidaActiva}
         valor={subida}
         onActivo={setSubidaActiva}
         onValor={setSubida}
       />
       <Fila
-        titulo="Brecha paralelo / BCV"
-        descripcion="Avisarme si la diferencia entre el paralelo y el BCV llega a este porcentaje."
+        titulo="Brecha USDT / BCV"
+        descripcion="Avisarme si la diferencia entre el USDT y el BCV llega a este porcentaje."
         activo={brechaActiva}
         valor={brecha}
         onActivo={setBrechaActiva}

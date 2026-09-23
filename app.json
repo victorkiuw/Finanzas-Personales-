@@ -32,12 +32,12 @@
           "widgets": [
             {
               "name": "Resumen",
-              "label": "Finanzas: patrimonio y tasas",
+              "label": "Finanzas: disponible y tasas",
               "minWidth": "250dp",
               "minHeight": "110dp",
               "targetCellWidth": 4,
               "targetCellHeight": 2,
-              "description": "Tu patrimonio y las tasas BCV y paralelo del día",
+              "description": "Tu dinero disponible y las tasas BCV, USDT y euro del día",
               "updatePeriodMillis": 1800000
             }
           ]

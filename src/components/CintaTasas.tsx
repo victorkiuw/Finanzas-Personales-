@@ -2,10 +2,12 @@ import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Icon, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
-import { NOMBRE_PAR, PARES } from '../lib/api-tasas';
+import { NOMBRE_PAR, PARES, TODOS_LOS_PARES, type Par } from '../lib/api-tasas';
 import { haceCuanto } from '../lib/fechas';
 import { formatearTasa } from '../lib/tasa';
 import { useTasas } from './TasasProvider';
+
+const ETIQUETA: Record<Par, string> = { ...NOMBRE_PAR, EURO: '€' };
 
 /** Resumen compacto de las tasas activas; al tocarlo abre la pestaña de tasas. */
 export function CintaTasas() {
@@ -25,7 +27,9 @@ export function CintaTasas() {
         <Icon source={error ? 'cloud-off-outline' : 'swap-vertical-circle-outline'} size={18} color={tema.colors.onSurfaceVariant} />
         <View style={styles.flex}>
           <Text variant="labelLarge">
-            {PARES.map((p) => `${NOMBRE_PAR[p]} ${tasas[p] ? formatearTasa(tasas[p].tasa) : '—'}`).join('   ·   ')}
+            {TODOS_LOS_PARES.filter((p) => p !== 'EURO' || tasas.EURO)
+              .map((p) => `${ETIQUETA[p]} ${tasas[p] ? formatearTasa(tasas[p].tasa) : '—'}`)
+              .join('  ·  ')}
           </Text>
           <Text variant="bodySmall" style={{ color: error ? tema.colors.error : tema.colors.onSurfaceVariant }}>
             {estado}

@@ -4,7 +4,7 @@ import type { DatosWidget } from './datos';
 
 export const NOMBRE_WIDGET = 'Resumen';
 
-/** Widget de la pantalla de inicio: patrimonio y tasas del día. Tocarlo abre la app. */
+/** Widget de la pantalla de inicio: dinero disponible y tasas del día. Tocarlo abre la app. */
 export function WidgetFinanzas({ datos, oscuro }: { datos: DatosWidget | null; oscuro: boolean }) {
   const fondo = oscuro ? '#1C1F1D' : '#F6F8F6';
   const texto = oscuro ? '#E6E9E6' : '#1A1C1A';
@@ -23,7 +23,7 @@ export function WidgetFinanzas({ datos, oscuro }: { datos: DatosWidget | null; o
         justifyContent: 'space-between',
       }}
     >
-      <TextWidget text="Patrimonio" style={{ fontSize: 13, color: suave }} />
+      <TextWidget text="Disponible" style={{ fontSize: 13, color: suave }} />
       <TextWidget
         text={datos ? datos.patrimonio : 'Abre la app para empezar'}
         style={{ fontSize: 24, fontWeight: 'bold', color: acento }}
@@ -31,8 +31,9 @@ export function WidgetFinanzas({ datos, oscuro }: { datos: DatosWidget | null; o
         truncate="END"
       />
       <FlexWidget style={{ flexDirection: 'row', width: 'match_parent', justifyContent: 'space-between' }}>
-        <TextWidget text={datos ? `BCV ${datos.bcv}` : ''} style={{ fontSize: 14, color: texto }} />
-        <TextWidget text={datos ? `Paralelo ${datos.paralelo}` : ''} style={{ fontSize: 14, color: texto }} />
+        <TextWidget text={datos ? `BCV ${datos.bcv}` : ''} style={{ fontSize: 13, color: texto }} />
+        <TextWidget text={datos ? `USDT ${datos.paralelo}` : ''} style={{ fontSize: 13, color: texto }} />
+        <TextWidget text={datos ? `€ ${datos.euro}` : ''} style={{ fontSize: 13, color: texto }} />
       </FlexWidget>
       <TextWidget
         text={datos ? `Con tasa ${datos.referencia}${datos.actualizado ? ` · tasas de las ${datos.actualizado}` : ''}` : ''}

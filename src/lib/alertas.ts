@@ -24,14 +24,14 @@ export function evaluarAlertas(
     const subida = (paralelo / paraleloAnterior - 1) * 100;
     if (subida >= config.subidaParalelo) {
       mensajes.push(
-        `El paralelo subió ${subida.toFixed(1).replace('.', ',')} %: de ${formatearTasa(paraleloAnterior)} a ${formatearTasa(paralelo)} Bs./USD.`,
+        `El USDT subió ${subida.toFixed(1).replace('.', ',')} %: de ${formatearTasa(paraleloAnterior)} a ${formatearTasa(paralelo)} Bs./USD.`,
       );
     }
   }
   if (config.brechaMaxima !== null && bcv && paralelo) {
     const b = brecha(bcv, paralelo);
     if (b >= config.brechaMaxima) {
-      mensajes.push(`La brecha entre paralelo y BCV llegó a ${b.toFixed(1).replace('.', ',')} %.`);
+      mensajes.push(`La brecha entre USDT y BCV llegó a ${b.toFixed(1).replace('.', ',')} %.`);
     }
   }
   return mensajes;

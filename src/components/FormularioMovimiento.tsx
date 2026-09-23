@@ -28,8 +28,8 @@ import {
   type TipoMovimiento,
 } from '../db/movimientos';
 import { formatearFechaCorta, formatearHora } from '../lib/fechas';
-import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
-import { calcularTasa, hayBolivar, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
+import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
+import { calcularTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { calcularComision, describirComision, tieneComision } from '../lib/comision';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
@@ -133,7 +133,7 @@ export function FormularioMovimiento({ id, tipoInicial = 'GASTO', billeteraInici
   const conCambio = esTransferencia && origen && destino && origen.moneda !== destino.moneda;
   const monto = parsearMonto(montoTexto);
   // Entre USD y USDT la tasa por defecto es 1 (se consideran equivalentes); con Bs. hay que escribirla.
-  const tasaPorDefecto = origen && destino && !hayBolivar(origen.moneda, destino.moneda) ? 1 : null;
+  const tasaPorDefecto = origen && destino && equivalentes(origen.moneda, destino.moneda) ? 1 : null;
   const tasa = parsearTasa(tasaTexto) ?? tasaPorDefecto;
   const recibido =
     recibidoTexto.trim() !== ''

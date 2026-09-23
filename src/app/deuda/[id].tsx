@@ -9,14 +9,14 @@ import { ListaMovimientos } from '../../components/ListaMovimientos';
 import { ResumenDeuda, vencida } from '../../components/TarjetaDeuda';
 import { useTasas } from '../../components/TasasProvider';
 import { eliminarDeuda, establecerDeudaCerrada, obtenerDeuda, type Deuda } from '../../db/deudas';
-import { fechaSimpleLegible, formatearFechaCorta } from '../../lib/fechas';
+import { fechaSimpleLegible } from '../../lib/fechas';
 
 export default function DetalleDeuda() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const deudaId = Number(id);
   const db = useSQLiteContext();
   const tema = useTheme();
-  const { tasas } = useTasas();
+  const { tasas, referencia } = useTasas();
   const [deuda, setDeuda] = useState<Deuda | null>(null);
   const [pagando, setPagando] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -97,11 +97,12 @@ export default function DetalleDeuda() {
             <View>
               <Card mode="contained" style={styles.tarjeta}>
                 <Card.Content style={styles.contenido}>
-                  <ResumenDeuda deuda={deuda} tasas={tasas} />
-                  <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-                    {`Desde el ${formatearFechaCorta(new Date(deuda.fecha))}`}
-                    {deuda.fecha_limite ? ` · ${vencida(deuda) ? 'venció' : 'vence'} el ${fechaSimpleLegible(deuda.fecha_limite)}` : ''}
-                  </Text>
+                  <ResumenDeuda deuda={deuda} tasas={tasas} referencia={referencia} detalle />
+                  {deuda.fecha_limite && !deuda.cerrada && (
+                    <Text variant="bodySmall" style={{ color: vencida(deuda) ? tema.colors.error : tema.colors.onSurfaceVariant }}>
+                      {`${vencida(deuda) ? 'Venció' : 'Debe pagarse antes del'} ${fechaSimpleLegible(deuda.fecha_limite)}`}
+                    </Text>
+                  )}
                   {deuda.nota && <Text variant="bodyMedium">{deuda.nota}</Text>}
                   {deuda.cerrada && (
                     <Text variant="labelLarge" style={{ color: tema.colors.primary }}>

@@ -2,10 +2,13 @@ import {
   consultarHistorico,
   consultarTasas,
   PARES,
+  TODOS_LOS_PARES,
   type Par,
+  type ParDolar,
   type TasaConsultada,
   type TasaDiaria,
 } from '../lib/api-tasas';
+import type { Cambio } from '../lib/conversion';
 import { claveDia } from '../lib/fechas';
 import { guardarPreferencia, leerPreferencia } from './preferencias';
 import type { BaseDatos } from './tipos';
@@ -40,7 +43,7 @@ export async function guardarTasa(
   origen: 'API' | 'MANUAL',
   ahora = new Date(),
 ): Promise<void> {
-  if (!PARES.includes(par) || !(t.tasa > 0)) throw new Error('Tasa inválida.');
+  if (!TODOS_LOS_PARES.includes(par) || !(t.tasa > 0)) throw new Error('Tasa inválida.');
   await db.runAsync(
     `INSERT INTO tasas_cache (par, tasa, ultima_actualizacion, consultada_en, origen) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (par) DO UPDATE SET
@@ -92,7 +95,7 @@ export async function actualizarTasasDesdeApi(
   consultar: () => Promise<Partial<Record<Par, TasaConsultada>>> = () => consultarTasas(),
 ): Promise<Tasas> {
   const nuevas = await consultar();
-  for (const par of PARES) {
+  for (const par of TODOS_LOS_PARES) {
     const t = nuevas[par];
     if (t) await guardarTasa(db, par, t, 'API');
   }
@@ -103,6 +106,8 @@ export async function actualizarTasasDesdeApi(
 export const MINUTOS_VIGENCIA = 30;
 
 export function tasasVencidas(tasas: Tasas, ahora = new Date()): boolean {
+  // Sin tasa del euro (p. ej. recién actualizada la app) se consulta de una vez.
+  if (!tasas.EURO) return true;
   return PARES.some((par) => {
     const t = tasas[par];
     if (!t?.consultada_en) return true;
@@ -137,4 +142,20 @@ export function alinearHistoriales(
     });
   });
   return { dias: todosLosDias, valores };
+}
+
+/**
+ * Bs. por euro coherente con la referencia del dólar: con BCV es el euro BCV;
+ * con USDT se aplica al USDT la misma relación euro/dólar del BCV, para que
+ * los euros no queden subvalorados frente a los dólares.
+ */
+export function euroSegun(dolarRef: number | null, bcv: number | null, euroBcv: number | null): number | null {
+  if (!dolarRef || !bcv || !euroBcv) return null;
+  return dolarRef === bcv ? euroBcv : (dolarRef * euroBcv) / bcv;
+}
+
+/** Tasas vigentes para convertir con la referencia elegida. */
+export function cambioDe(tasas: Tasas, referencia: ParDolar): Cambio {
+  const dolar = tasas[referencia]?.tasa ?? null;
+  return { dolar, euro: euroSegun(dolar, tasas.BCV?.tasa ?? null, tasas.EURO?.tasa ?? null) };
 }
