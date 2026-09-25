@@ -398,6 +398,12 @@ const MIGRACIONES: (string | Migracion)[] = [
   CREATE INDEX idx_ajustes_deuda ON ajustes_deuda(deuda_id);
   CREATE INDEX idx_ajustes_grupo ON ajustes_deuda(grupo);
   `,
+  // v12: dinero que le entra a otra persona en mi cuenta: el ajuste va enlazado
+  // al movimiento de entrada y se borra con él.
+  `
+  ALTER TABLE ajustes_deuda ADD COLUMN transaccion_id INTEGER REFERENCES transacciones(id) ON DELETE CASCADE;
+  CREATE INDEX idx_ajustes_transaccion ON ajustes_deuda(transaccion_id);
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

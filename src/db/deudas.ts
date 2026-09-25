@@ -536,7 +536,78 @@ export interface AjusteDeuda {
 /** Cambios sin movimiento (tomado prestado, devuelto) de una deuda, del más nuevo al más viejo. */
 export async function listarAjustes(db: BaseDatos, deudaId: number): Promise<AjusteDeuda[]> {
   return db.getAllAsync<AjusteDeuda>(
-    `SELECT id, monto, fecha, nota FROM ajustes_deuda WHERE deuda_id = ? ORDER BY fecha DESC, id DESC`,
+    `SELECT id, monto, fecha, nota FROM ajustes_deuda WHERE deuda_id = ? AND transaccion_id IS NULL ORDER BY fecha DESC, id DESC`,
     [deudaId],
   );
+}
+
+export interface DatosDineroAjeno {
+  billetera_id: number;
+  fecha: string;
+  /** El dinero ya estaba en el saldo (por defecto) o entra ahora a la billetera. */
+  ya_en_saldo?: boolean;
+  /** Una o varias personas, cada una con lo suyo (en la moneda de la billetera). */
+  personas: { persona: string; monto: number }[];
+  nota?: string | null;
+}
+
+/** Registra de una vez el dinero de una o varias personas guardado en una billetera. */
+export async function crearDineroAjeno(db: BaseDatos, d: DatosDineroAjeno): Promise<number[]> {
+  if (d.personas.length === 0) throw new ErrorValidacion('Agrega al menos una persona.');
+  const b = await db.getFirstAsync<{ moneda: Moneda; archivada: number }>(
+    `SELECT moneda, archivada FROM billeteras WHERE id = ?`,
+    [d.billetera_id],
+  );
+  if (!b || b.archivada) throw new ErrorValidacion('Elige una billetera activa.');
+  const lista: DatosDeuda[] = d.personas.map((p) => ({
+    tipo: 'DEBO',
+    persona: p.persona,
+    moneda: b.moneda,
+    monto: p.monto,
+    fecha: d.fecha,
+    nota: d.nota,
+    billetera_id: d.billetera_id,
+    ajeno: true,
+    ya_en_saldo: d.ya_en_saldo,
+  }));
+  const validadas: { datos: DatosDeuda; persona: string; total: number }[] = [];
+  for (const x of lista) validadas.push({ datos: x, ...(await validarDeuda(db, x)) });
+  return enTransaccion(db, async () => {
+    const ids: number[] = [];
+    for (const { datos, persona, total } of validadas) {
+      const r = await db.runAsync(
+        `INSERT INTO deudas (tipo, persona, moneda, monto, fecha, nota, ajeno, billetera_id) VALUES ('DEBO', ?, ?, ?, ?, ?, 1, ?)`,
+        [persona, datos.moneda, datos.monto, datos.fecha, datos.nota?.trim() || null, d.billetera_id],
+      );
+      await insertarPrestamo(db, r.lastInsertRowId, datos, total, null);
+      ids.push(r.lastInsertRowId);
+    }
+    return ids;
+  });
+}
+
+/**
+ * A la otra persona le entró dinero en mi cuenta (alguien le envió, depositó…):
+ * sube el saldo de la billetera y sube lo suyo.
+ */
+export async function entradaDineroAjeno(
+  db: BaseDatos,
+  p: { ajeno_id: number; monto: number; fecha: string; nota?: string | null },
+): Promise<void> {
+  const ajeno = await obtenerAjeno(db, p.ajeno_id);
+  if (!ajeno.billetera_id) throw new ErrorValidacion('La billetera donde guardas ese dinero ya no existe.');
+  if (!Number.isSafeInteger(p.monto) || p.monto <= 0) throw new ErrorValidacion('El monto debe ser mayor que cero.');
+  if (Number.isNaN(Date.parse(p.fecha))) throw new ErrorValidacion('La fecha no es válida.');
+  await enTransaccion(db, async () => {
+    const t = await db.runAsync(
+      `INSERT INTO transacciones (tipo, monto, fecha, billetera_origen_id, deuda_id, monto_destino, nota)
+       VALUES ('PRESTAMO_RECIBIDO', ?, ?, ?, ?, ?, ?)`,
+      [p.monto, p.fecha, ajeno.billetera_id, ajeno.id, p.monto, p.nota?.trim() || `Le entró a ${ajeno.persona}`],
+    );
+    await db.runAsync(
+      `INSERT INTO ajustes_deuda (deuda_id, monto, fecha, grupo, nota, transaccion_id) VALUES (?, ?, ?, ?, ?, ?)`,
+      [ajeno.id, -p.monto, p.fecha, `entrada-${t.lastInsertRowId}`, 'Le entró dinero', t.lastInsertRowId],
+    );
+    if (ajeno.cerrada) await establecerDeudaCerrada(db, ajeno.id, false);
+  });
 }

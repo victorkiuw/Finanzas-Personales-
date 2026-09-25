@@ -147,3 +147,34 @@ test('la gráfica de disponible no cuenta el dinero de otros', async () => {
   // Mercantil Bs. 100.000 a 1.000 = $100; Binance 200 − 10 entregados; de la abuela quedan 70.
   assert.equal(p.total, 10000 + 19000 - 7000);
 });
+
+test('prestar la cuenta a varias personas: entra y sale dinero de cada una', async () => {
+  const { db, binance, saldo } = await preparar();
+  const { crearDineroAjeno, entradaDineroAjeno } = await import('../src/db/deudas');
+  await assert.rejects(crearDineroAjeno(db, { billetera_id: binance, fecha: hoy, personas: [] }), /al menos una/);
+  const [negro, maria] = await crearDineroAjeno(db, {
+    billetera_id: binance, fecha: hoy, ya_en_saldo: false,
+    personas: [{ persona: 'Negro', monto: 5000 }, { persona: 'María', monto: 3000 }],
+  });
+  assert.equal(await saldo(binance), 28000);
+  assert.equal(ajenoPorBilletera(await listarDeudas(db)).get(binance), 8000);
+
+  // A Negro le envían 20 USDT a mi cuenta y luego sale todo lo suyo.
+  await entradaDineroAjeno(db, { ajeno_id: negro, monto: 2000, fecha: hoy });
+  assert.equal(await saldo(binance), 30000);
+  assert.equal((await obtenerDeuda(db, negro))!.pendiente, 7000);
+  await registrarPagoDeuda(db, { deuda_id: negro, billetera_id: binance, monto: 7000, fecha: hoy });
+  assert.equal((await obtenerDeuda(db, negro))!.cerrada, true);
+  // Le vuelve a entrar: se reabre.
+  await entradaDineroAjeno(db, { ajeno_id: negro, monto: 1000, fecha: hoy });
+  assert.equal((await obtenerDeuda(db, negro))!.cerrada, false);
+  assert.equal((await obtenerDeuda(db, negro))!.pendiente, 1000);
+  assert.equal((await obtenerDeuda(db, maria))!.pendiente, 3000);
+  assert.equal((await listarAjustes(db, negro)).length, 0); // las entradas se ven como movimientos
+
+  // Borrar el movimiento de entrada deshace lo suyo.
+  const { eliminarMovimiento } = await import('../src/db/movimientos');
+  const entrada = (await listarMovimientos(db, { deudaId: negro })).find((m) => m.monto === 1000 && m.tipo === 'PRESTAMO_RECIBIDO')!;
+  await eliminarMovimiento(db, entrada.id);
+  assert.equal((await obtenerDeuda(db, negro))!.pendiente, 0);
+});
