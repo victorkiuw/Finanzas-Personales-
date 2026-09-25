@@ -10,6 +10,8 @@ import { listarCategorias, type Categoria } from '../db/categorias';
 import { crearCompra, DIAS_ENTRE_CUOTAS, montosCuotas, ultimaInicialPct } from '../db/cuotas';
 import { formatearFechaCorta } from '../lib/fechas';
 import { centimosATexto, formatearMonto, parsearMonto } from '../lib/moneda';
+import type { DestinoPago } from '../lib/comision';
+import { ComisionPago } from './ComisionPago';
 import { PagoDesdeBilletera } from './PagoDesdeBilletera';
 import { SelectorCategoria } from './SelectorCategoria';
 
@@ -24,12 +26,15 @@ export function FormularioCompraCuotas({
   categoriaInicial,
   descripcionInicial,
   billeteraInicial,
+  comisionInicial,
 }: {
   /** Céntimos de dólar. */
   totalInicial?: number;
   categoriaInicial?: number;
   descripcionInicial?: string;
   billeteraInicial?: number;
+  /** Comisión elegida en "Nuevo movimiento": sin comisión (null) o a quién se pagó. */
+  comisionInicial?: DestinoPago | null;
 } = {}) {
   const db = useSQLiteContext();
   const tema = useTheme();
@@ -47,6 +52,7 @@ export function FormularioCompraCuotas({
   const [pagueInicial, setPagueInicial] = useState(true);
   const [billeteraId, setBilleteraId] = useState<number | null>(null);
   const [montoBilletera, setMontoBilletera] = useState<number | null>(null);
+  const [comision, setComision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -111,6 +117,7 @@ export function FormularioCompraCuotas({
         categoria_id: categoriaId,
         billetera_id: pagueInicial && inicial > 0 ? billeteraId : null,
         monto_billetera: montoBilletera,
+        comision: pagueInicial && inicial > 0 ? comision : 0,
       });
       router.replace(`/cuota/${id}`);
     } catch (e) {
@@ -204,6 +211,18 @@ export function FormularioCompraCuotas({
                 billeteraId={billeteraId}
                 onBilletera={setBilleteraId}
                 onMonto={setMontoBilletera}
+              />
+            )}
+            {pagueInicial && (
+              <ComisionPago
+                key={billeteraId ?? 0}
+                billetera={billeteras.find((b) => b.id === billeteraId) ?? null}
+                monto={montoBilletera}
+                onComision={setComision}
+                activaInicial={
+                  comisionInicial === undefined || billeteraId !== billeteraInicial ? undefined : comisionInicial !== null
+                }
+                destinoInicial={comisionInicial ?? undefined}
               />
             )}
             {!pagueInicial && (

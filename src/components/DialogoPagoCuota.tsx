@@ -6,6 +6,7 @@ import { Button, Dialog, HelperText, Portal, Text } from 'react-native-paper';
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import { pagarCuota, type CompraCuotas } from '../db/cuotas';
 import { formatearMonto } from '../lib/moneda';
+import { ComisionPago } from './ComisionPago';
 import { PagoDesdeBilletera } from './PagoDesdeBilletera';
 
 /** Paga la próxima cuota de una compra desde una billetera (con la tasa BCV si es en bolívares). */
@@ -22,6 +23,7 @@ export function DialogoPagoCuota({
   const [billeteras, setBilleteras] = useState<Billetera[]>([]);
   const [billeteraId, setBilleteraId] = useState<number | null>(null);
   const [montoBilletera, setMontoBilletera] = useState<number | null>(null);
+  const [comision, setComision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const usd = compra.proxima ? Math.min(compra.proxima.monto, compra.pendiente) : compra.pendiente;
@@ -47,6 +49,7 @@ export function DialogoPagoCuota({
         billetera_id: billeteraId,
         usd,
         monto_billetera: montoBilletera,
+        comision,
         fecha: new Date().toISOString(),
       });
       onCerrar(true);
@@ -70,6 +73,12 @@ export function DialogoPagoCuota({
               billeteraId={billeteraId}
               onBilletera={setBilleteraId}
               onMonto={setMontoBilletera}
+            />
+            <ComisionPago
+              key={billeteraId ?? 0}
+              billetera={billeteras.find((b) => b.id === billeteraId) ?? null}
+              monto={montoBilletera}
+              onComision={setComision}
             />
             {error && <HelperText type="error">{error}</HelperText>}
           </ScrollView>

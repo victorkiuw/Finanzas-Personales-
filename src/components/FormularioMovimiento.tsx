@@ -319,6 +319,8 @@ export function FormularioMovimiento({
         categoria: categoriaId ? String(categoriaId) : '',
         descripcion: nota.trim(),
         billetera: origenId ? String(origenId) : '',
+        // La comisión se calcula en el siguiente paso sobre lo que de verdad sale (la inicial).
+        comision: !comisionActiva ? 'NO' : aQuien === 'OTRA' ? '' : aQuien,
       },
     });
   };
@@ -666,13 +668,15 @@ export function FormularioMovimiento({
           </View>
         )}
 
-        {admiteComision && origen && !usaCashea && (
+        {admiteComision && origen && (
           <View style={styles.bloque}>
             <View style={styles.filaSwitch}>
               <View style={styles.flex}>
                 <Text variant="labelLarge">Comisión bancaria</Text>
                 <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-                  {comisionActiva
+                  {comisionActiva && usaCashea
+                    ? 'Se calcula sobre la inicial que pagues, en el siguiente paso'
+                    : comisionActiva
                     ? `${formatearMonto(comision ?? 0, origen.moneda)} · se registra aparte en "Comisiones"`
                     : tieneComision(configComision)
                       ? `Desactivada (${origen.nombre}: ${describirComision(configComision, (c) => formatearMonto(c, origen.moneda))})`
@@ -693,7 +697,7 @@ export function FormularioMovimiento({
                     ['COMERCIO', 'A comercio'],
                     ['OTRA', 'Otro monto'],
                   ] as const
-                ).map(([valor, texto]) => {
+                ).filter(([valor]) => !usaCashea || valor !== 'OTRA').map(([valor, texto]) => {
                   const cfg = valor === 'OTRA' ? null : comisionPara(valor, configBilletera);
                   return (
                     <Chip
@@ -710,7 +714,7 @@ export function FormularioMovimiento({
                 })}
               </View>
             )}
-            {comisionActiva && aQuien === 'OTRA' && (
+            {comisionActiva && aQuien === 'OTRA' && !usaCashea && (
               <TextInput
                 label="Monto de la comisión"
                 value={comisionTexto}
@@ -722,14 +726,14 @@ export function FormularioMovimiento({
                 right={<TextInput.Affix text={INFO_MONEDA[origen.moneda].corto} />}
               />
             )}
-            {comisionActiva && !aMano && (
+            {comisionActiva && !aMano && !usaCashea && (
               <HelperText type="info">
                 {tieneComision(configComision)
                   ? `Calculada: ${describirComision(configComision, (c) => formatearMonto(c, origen.moneda))}.${aQuien === 'OTRA' ? ' Escribe otro monto si tu banco cobró distinto.' : ''}`
                   : 'Escribe cuánto te cobró el banco. Puedes configurar la comisión en la billetera.'}
               </HelperText>
             )}
-            {comisionActiva && monto !== null && monto > 0 && comision !== null && comision > 0 && (
+            {comisionActiva && !usaCashea && monto !== null && monto > 0 && comision !== null && comision > 0 && (
               <Text variant="bodyMedium">
                 {`Total que sale: ${formatearMonto(monto + comision, origen.moneda)} (${formatearMonto(monto, origen.moneda)} + ${formatearMonto(comision, origen.moneda)} de comisión)`}
               </Text>

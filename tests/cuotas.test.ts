@@ -93,3 +93,22 @@ test('validaciones de compras a cuotas', async () => {
   const usd = await crearBilletera(db, { icono: 'x', color_hex: '#000', nombre: 'Bs', moneda: 'BS', balance_inicial: 0 });
   await assert.rejects(crearCompra(db, { ...base, inicial: 100, billetera_id: usd }), /cuánto salió/);
 });
+
+test('la comisión del Pago Móvil se registra aparte al pagar la inicial y las cuotas', async () => {
+  const db = await crearBdMemoria();
+  const banco = await crearBilletera(db, { icono: 'wallet', color_hex: '#000000', nombre: 'Mercantil', moneda: 'BS', balance_inicial: 10000000 });
+  const saldo = async (id: number) => (await obtenerBilletera(db, id))!.saldo;
+  const cat = (await listarCategorias(db, 'GASTO'))[0].id;
+  // Inicial $10 = Bs. 5.000 a 500; comisión Bs. 75.
+  const id = await crearCompra(db, {
+    comercio: 'Tienda', total: 4000, inicial: 1000, cuotas: 3, fecha: '2026-09-01T12:00:00.000Z', categoria_id: cat,
+    billetera_id: banco, monto_billetera: 500000, comision: 7500,
+  });
+  assert.equal(await saldo(banco), 10000000 - 500000 - 7500);
+  await pagarCuota(db, { compra_id: id, billetera_id: banco, monto_billetera: 500000, fecha: '2026-09-15T12:00:00.000Z', comision: 7500 });
+  assert.equal(await saldo(banco), 10000000 - 2 * (500000 + 7500));
+  // La comisión no cuenta como abono a la compra.
+  assert.equal((await obtenerCompra(db, id))!.pendiente, 2000);
+  await eliminarCompra(db, id);
+  assert.equal(await saldo(banco), 10000000);
+});

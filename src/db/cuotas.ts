@@ -1,6 +1,7 @@
 import { calcularTasa } from '../lib/tasa';
 import { equivalentes, type Moneda } from '../lib/moneda';
 import { ErrorValidacion } from './billeteras';
+import { categoriaComisiones } from './categorias';
 import { guardarPreferencia, leerPreferencia } from './preferencias';
 import { enTransaccion, type BaseDatos } from './tipos';
 
@@ -57,6 +58,8 @@ export interface DatosCompra {
   billetera_id?: number | null;
   /** Lo que salió de la billetera en su moneda (si no es en dólares). */
   monto_billetera?: number | null;
+  /** Comisión bancaria del pago de la inicial, en la moneda de la billetera. */
+  comision?: number | null;
 }
 
 const aClave = (d: Date) =>
@@ -126,6 +129,21 @@ export async function obtenerCompra(db: BaseDatos, id: number): Promise<CompraCu
   return f ? aCompra(f) : null;
 }
 
+function validarComision(c: number | null | undefined): number {
+  if (!c) return 0;
+  if (!Number.isSafeInteger(c) || c < 0) throw new ErrorValidacion('La comisión no es válida.');
+  return c;
+}
+
+/** Gasto de comisión bancaria enlazado al pago (se borra con él). */
+async function insertarComision(db: BaseDatos, padre: number, billetera: number, comision: number, fecha: string) {
+  await db.runAsync(
+    `INSERT INTO transacciones (tipo, monto, fecha, categoria_id, billetera_origen_id, nota, comision_de)
+     VALUES ('GASTO', ?, ?, ?, ?, 'Comisión bancaria', ?)`,
+    [comision, fecha, await categoriaComisiones(db), billetera, padre],
+  );
+}
+
 async function billeteraActiva(db: BaseDatos, id: number) {
   const b = await db.getFirstAsync<{ moneda: Moneda; archivada: number }>(`SELECT moneda, archivada FROM billeteras WHERE id = ?`, [id]);
   if (!b || b.archivada) throw new ErrorValidacion('Elige una billetera activa.');
@@ -153,6 +171,7 @@ export async function crearCompra(db: BaseDatos, d: DatosCompra): Promise<number
   const pago = d.billetera_id && d.inicial > 0
     ? montoEnBilletera((await billeteraActiva(db, d.billetera_id)).moneda, d.inicial, d.monto_billetera)
     : null;
+  const comision = validarComision(d.comision);
 
   return enTransaccion(db, async () => {
     const r = await db.runAsync(
@@ -168,6 +187,7 @@ export async function crearCompra(db: BaseDatos, d: DatosCompra): Promise<number
         [pago.monto, d.fecha, d.categoria_id, d.billetera_id, d.inicial, pago.tasa, `Inicial ${comercio}`, id],
       );
       await db.runAsync(`UPDATE compras_cuotas SET inicial_transaccion_id = ? WHERE id = ?`, [t.lastInsertRowId, id]);
+      if (comision) await insertarComision(db, t.lastInsertRowId, d.billetera_id, comision, d.fecha);
     }
     if (d.total > 0) await guardarPreferencia(db, CLAVE_ULTIMA_INICIAL, String(Math.round((d.inicial / d.total) * 100)));
     return id;
@@ -177,7 +197,15 @@ export async function crearCompra(db: BaseDatos, d: DatosCompra): Promise<number
 /** Paga la próxima cuota (o el monto indicado en dólares) desde una billetera. */
 export async function pagarCuota(
   db: BaseDatos,
-  p: { compra_id: number; billetera_id: number; usd?: number; monto_billetera?: number | null; fecha: string },
+  p: {
+    compra_id: number;
+    billetera_id: number;
+    usd?: number;
+    monto_billetera?: number | null;
+    fecha: string;
+    /** Comisión bancaria del pago, en la moneda de la billetera. */
+    comision?: number | null;
+  },
 ): Promise<number> {
   const c = await obtenerCompra(db, p.compra_id);
   if (!c) throw new ErrorValidacion('La compra no existe.');
@@ -187,12 +215,16 @@ export async function pagarCuota(
   if (usd > c.pendiente) throw new ErrorValidacion('Es más de lo que falta por pagar.');
   const b = await billeteraActiva(db, p.billetera_id);
   const pago = montoEnBilletera(b.moneda, usd, p.monto_billetera);
-  const r = await db.runAsync(
-    `INSERT INTO transacciones (tipo, monto, fecha, categoria_id, billetera_origen_id, monto_destino, tasa_cambio, nota, compra_id)
-     VALUES ('GASTO', ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [pago.monto, p.fecha, c.categoria_id, p.billetera_id, usd, pago.tasa, `Cuota ${c.comercio}`, c.id],
-  );
-  return r.lastInsertRowId;
+  const comision = validarComision(p.comision);
+  return enTransaccion(db, async () => {
+    const r = await db.runAsync(
+      `INSERT INTO transacciones (tipo, monto, fecha, categoria_id, billetera_origen_id, monto_destino, tasa_cambio, nota, compra_id)
+       VALUES ('GASTO', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [pago.monto, p.fecha, c.categoria_id, p.billetera_id, usd, pago.tasa, `Cuota ${c.comercio}`, c.id],
+    );
+    if (comision) await insertarComision(db, r.lastInsertRowId, p.billetera_id, comision, p.fecha);
+    return r.lastInsertRowId;
+  });
 }
 
 /** Borra la compra y todos sus pagos (los saldos se recalculan). */
