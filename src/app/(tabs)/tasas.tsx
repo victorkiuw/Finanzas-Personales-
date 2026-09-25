@@ -134,11 +134,6 @@ export default function PantallaTasas() {
             </Text>
             {otras.map((m) => {
               const v = monto !== null ? convertirNatural(monto, moneda, m, naturales) : null;
-              // Dólares ↔ bolívares: también a la tasa USDT, que es la de la calle.
-              const alterna =
-                monto !== null && ((moneda === 'USD' && m === 'BS') || (moneda === 'BS' && m === 'USD')) && naturales.usdt
-                  ? convertirNatural(monto, moneda === 'USD' ? 'USDT' : 'BS', moneda === 'USD' ? 'BS' : 'USDT', naturales)
-                  : null;
               return (
                 <View key={m} style={styles.lineaResultado}>
                   <Text variant="headlineSmall" style={styles.cifra}>
@@ -146,7 +141,6 @@ export default function PantallaTasas() {
                   </Text>
                   <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
                     {etiquetaTasa(moneda, m)}
-                    {alterna !== null ? ` · a tasa USDT: ${formatearMonto(alterna, m)}` : ''}
                   </Text>
                 </View>
               );
