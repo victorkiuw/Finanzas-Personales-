@@ -47,7 +47,6 @@ type Historial = { dia: string; tasa: number }[];
 
 /** Qué tasa se usó para pasar de una moneda a otra en la calculadora. */
 function etiquetaTasa(de: Moneda, a: Moneda): string {
-  if ((de === 'USD' || de === 'USDT') && (a === 'USD' || a === 'USDT')) return '1:1';
   const otra = de === 'BS' ? a : a === 'BS' ? de : null;
   if (otra === 'USD') return 'tasa BCV';
   if (otra === 'USDT') return 'tasa USDT';
@@ -84,7 +83,9 @@ export default function PantallaTasas() {
   const [tasaManual, setTasaManual] = useState('');
 
   const monto = parsearMonto(montoTexto);
-  const otras = MONEDAS.filter((m) => m !== moneda);
+  // Dólar y USDT no se convierten entre sí (sería 1:1 y solo estorba).
+  const esDolarOUsdt = (m: Moneda) => m === 'USD' || m === 'USDT';
+  const otras = MONEDAS.filter((m) => m !== moneda && !(esDolarOUsdt(m) && esDolarOUsdt(moneda)));
   const naturales: TasasNaturales = {
     bcv: tasas.BCV?.tasa ?? null,
     usdt: tasas.PARALELO?.tasa ?? null,
@@ -153,8 +154,7 @@ export default function PantallaTasas() {
           </Card.Content>
         </Card>
         <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-          Cada moneda con su tasa: los dólares con la BCV, el USDT con la tasa USDT y los euros con el euro BCV. USD y
-          USDT se toman 1:1 entre sí.
+          Cada moneda con su tasa: los dólares con la BCV, el USDT con la tasa USDT y los euros con el euro BCV.
         </Text>
 
         <Divider style={styles.divisor} />
