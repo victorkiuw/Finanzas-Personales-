@@ -55,6 +55,11 @@ test('dinero de otros: no mueve saldos y se resta por billetera', async () => {
   assert.equal(await saldo(binance), 25000);
   await actualizarDeuda(db, nuevo, { tipo: 'DEBO', persona: 'Papá', moneda: 'USDT', monto: 6000, fecha: hoy, billetera_id: binance, ajeno: true });
   assert.equal(await saldo(binance), 26000);
+  // Al editar se puede cambiar: ya estaba en el saldo (se quita la entrada) y de nuevo sumarlo.
+  await actualizarDeuda(db, nuevo, { tipo: 'DEBO', persona: 'Papá', moneda: 'USDT', monto: 6000, fecha: hoy, billetera_id: binance, ajeno: true, ya_en_saldo: true });
+  assert.equal(await saldo(binance), 20000);
+  await actualizarDeuda(db, nuevo, { tipo: 'DEBO', persona: 'Papá', moneda: 'USDT', monto: 6000, fecha: hoy, billetera_id: binance, ajeno: true, ya_en_saldo: false });
+  assert.equal(await saldo(binance), 26000);
 
   // Entregarle una parte: sale de la billetera y baja lo guardado.
   await registrarPagoDeuda(db, { deuda_id: id, billetera_id: binance, monto: 4000, fecha: hoy });

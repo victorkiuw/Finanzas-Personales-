@@ -17,6 +17,7 @@ import {
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import {
   actualizarDeuda,
+  ajenoYaEnSaldo,
   billeteraDeDeuda,
   crearDeuda,
   LARGO_MAXIMO_PERSONA,
@@ -94,6 +95,7 @@ export function FormularioDeuda({
         }
         setModo(d.ajeno ? 'AJENO' : d.tipo);
         setDeAjeno(d.origen_ajeno_id !== null);
+        if (d.ajeno) setYaEnSaldo(await ajenoYaEnSaldo(db, id));
         setPersona(d.persona);
         setMoneda(d.moneda);
         setMontoTexto(centimosATexto(d.monto));
@@ -191,7 +193,7 @@ export function FormularioDeuda({
         nota,
         billetera_id: deAjeno ? null : billeteraId,
         ajeno,
-        ya_en_saldo: ajeno && !editando ? yaEnSaldo : undefined,
+        ya_en_saldo: ajeno ? yaEnSaldo : undefined,
       };
       if (editando) {
         await actualizarDeuda(db, id, datos);
@@ -269,16 +271,20 @@ export function FormularioDeuda({
                 if (m) setMoneda(m);
               }}
             />
-            {!editando && (
-              <View style={styles.chips}>
+            <Text variant="labelLarge">¿Cómo llegó ese dinero?</Text>
+            <View style={styles.chips}>
                 <Chip compact selected={yaEnSaldo} showSelectedCheck={false} mode={yaEnSaldo ? 'flat' : 'outlined'} onPress={() => setYaEnSaldo(true)}>
                   Ya está en el saldo
                 </Chip>
                 <Chip compact selected={!yaEnSaldo} showSelectedCheck={false} mode={!yaEnSaldo ? 'flat' : 'outlined'} onPress={() => setYaEnSaldo(false)}>
                   Me lo acaba de dar (sumarlo)
                 </Chip>
-              </View>
-            )}
+            </View>
+            <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+              {yaEnSaldo
+                ? 'El saldo de la billetera no cambia: solo se aparta lo que es de esa persona.'
+                : 'Se suma al saldo de la billetera como un dinero que entró.'}
+            </Text>
           </View>
         )}
 

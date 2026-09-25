@@ -225,6 +225,15 @@ export async function billeteraDeDeuda(db: BaseDatos, id: number): Promise<numbe
   return f?.billetera_origen_id ?? null;
 }
 
+/** Dinero ajeno: true si ya estaba en el saldo (no se registró entrada a la billetera). */
+export async function ajenoYaEnSaldo(db: BaseDatos, id: number): Promise<boolean> {
+  const mov = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM transacciones WHERE deuda_id = ? AND tipo IN ('PRESTAMO_DADO', 'PRESTAMO_RECIBIDO')`,
+    [id],
+  );
+  return (mov?.n ?? 0) === 0;
+}
+
 /**
  * Edita todo de la deuda. El movimiento del préstamo se rehace con los datos
  * nuevos (o desaparece si se quita la billetera). Si ya hay pagos no se puede
@@ -240,13 +249,7 @@ export async function actualizarDeuda(db: BaseDatos, id: number, datos: DatosDeu
     if (d.moneda !== actual.moneda) throw new ErrorValidacion('No se puede cambiar la moneda de algo que tomaste prestado de lo que guardas.');
     d = { ...d, tipo: 'DEBO', billetera_id: null, ajeno: false };
   }
-  if (d.ajeno && d.ya_en_saldo === undefined) {
-    const mov = await db.getFirstAsync<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM transacciones WHERE deuda_id = ? AND tipo IN ('PRESTAMO_DADO', 'PRESTAMO_RECIBIDO')`,
-      [id],
-    );
-    d = { ...d, ya_en_saldo: (mov?.n ?? 0) === 0 };
-  }
+  if (d.ajeno && d.ya_en_saldo === undefined) d = { ...d, ya_en_saldo: await ajenoYaEnSaldo(db, id) };
   const { persona, tasa, total } = await validarDeuda(db, d, await billeteraDeDeuda(db, id));
 
   const pagos = await db.getFirstAsync<{ n: number }>(
