@@ -70,6 +70,8 @@ export interface Movimiento {
   comision: number | null;
   deuda_id: number | null;
   deuda_persona: string | null;
+  /** 1 si la "deuda" es dinero de otra persona guardado en mi cuenta. */
+  deuda_ajeno: number | null;
   /** Pago de una compra a cuotas (Cashea). */
   compra_id: number | null;
   compra_comercio: string | null;
@@ -103,7 +105,7 @@ const SELECT_MOVIMIENTO = `
     t.billetera_destino_id, d.nombre AS destino_nombre, d.moneda AS destino_moneda,
     t.monto_destino, t.tasa_cambio, t.meta_id, m.nombre AS meta_nombre, m.moneda AS meta_moneda,
     t.comision_de, (SELECT SUM(c.monto) FROM transacciones c WHERE c.comision_de = t.id) AS comision,
-    t.deuda_id, dd.persona AS deuda_persona, t.compra_id, cc.comercio AS compra_comercio, t.comprobante
+    t.deuda_id, dd.persona AS deuda_persona, dd.ajeno AS deuda_ajeno, t.compra_id, cc.comercio AS compra_comercio, t.comprobante
   FROM transacciones t
   JOIN billeteras o ON o.id = t.billetera_origen_id
   LEFT JOIN billeteras d ON d.id = t.billetera_destino_id

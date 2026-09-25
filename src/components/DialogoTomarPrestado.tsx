@@ -77,7 +77,7 @@ export function DialogoTomarPrestado({
         <Dialog.Title>{`Tomar prestado de lo de ${ajeno.persona}`}</Dialog.Title>
         <Dialog.Content style={styles.contenido}>
           <Text variant="bodyMedium">
-            {`Le guardas ${formatearMonto(ajeno.pendiente, ajeno.unidad)}. Lo que tomes deja de estar guardado y queda como algo que le debes. Tu saldo no cambia.`}
+            {`Tiene ${formatearMonto(ajeno.pendiente, ajeno.unidad)} en tu cuenta. Lo que tomes queda como algo que le debes. Tu saldo no cambia.`}
           </Text>
           <TextInput
             label="¿Cuánto tomas?"

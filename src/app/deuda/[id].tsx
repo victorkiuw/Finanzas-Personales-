@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Linking, StyleSheet, View } from 'react-native';
 import { Button, Card, Text, useTheme } from 'react-native-paper';
 
+import { DialogoEntradaAjeno } from '../../components/DialogoEntradaAjeno';
 import { DialogoPagoDeuda } from '../../components/DialogoPagoDeuda';
 import { DialogoTomarPrestado } from '../../components/DialogoTomarPrestado';
 import { ListaMovimientos } from '../../components/ListaMovimientos';
@@ -33,6 +34,7 @@ export default function DetalleDeuda() {
   const [deuda, setDeuda] = useState<Deuda | null>(null);
   const [pagando, setPagando] = useState(false);
   const [tomando, setTomando] = useState(false);
+  const [entrando, setEntrando] = useState(false);
   const [ajustes, setAjustes] = useState<AjusteDeuda[]>([]);
   // Si es dinero ajeno, lo que se ha tomado prestado de él y sigue pendiente.
   const [tomadas, setTomadas] = useState<Deuda[]>([]);
@@ -65,7 +67,7 @@ export default function DetalleDeuda() {
     Alert.alert(
       '¿Eliminar deuda?',
       deuda?.ajeno
-        ? 'Se borrará lo que le guardas y lo que le hayas entregado; lo que tomaste prestado queda como una deuda normal.'
+        ? 'Se borrará su dinero y lo que entró y salió de él (los saldos se recalculan); lo que tomaste prestado queda como una deuda normal.'
         : 'Se borrarán también el préstamo y los pagos registrados, y los saldos de tus billeteras se recalcularán.',
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -113,7 +115,9 @@ export default function DetalleDeuda() {
         key={version}
         filtro={{ deudaId }}
         textoVacio={
-          deuda?.ajeno || deuda?.origen_ajeno_id
+          deuda?.ajeno
+            ? 'Sin movimientos: aquí verás lo que le entra y le sale.'
+            : deuda?.origen_ajeno_id
             ? 'Sin movimientos en tus billeteras.'
             : 'Sin movimientos: esta deuda se registró sin mover saldos.'
         }
@@ -131,7 +135,7 @@ export default function DetalleDeuda() {
                   {deuda.nota && <Text variant="bodyMedium">{deuda.nota}</Text>}
                   {deuda.cerrada && (
                     <Text variant="labelLarge" style={{ color: tema.colors.primary }}>
-                      {deuda.ajeno ? '✓ Entregado' : '✓ Saldada'}
+                      {deuda.ajeno ? 'Ahora no tienes nada suyo.' : '✓ Saldada'}
                     </Text>
                   )}
                   {tomadas.map((t) => (
@@ -156,7 +160,12 @@ export default function DetalleDeuda() {
                   )}
                   {/* Acciones a la vista, sin menú escondido. */}
                   <View style={styles.acciones}>
-                    <Button compact mode="contained-tonal" icon="pencil" onPress={() => router.push(`/deuda/editar/${deudaId}`)}>
+                    <Button
+                      compact
+                      mode="contained-tonal"
+                      icon="pencil"
+                      onPress={() => router.push(deuda.ajeno ? `/ajeno/editar/${deudaId}` : `/deuda/editar/${deudaId}`)}
+                    >
                       Editar
                     </Button>
                     {!deuda.ajeno && (
@@ -170,15 +179,35 @@ export default function DetalleDeuda() {
                   </View>
                 </Card.Content>
               </Card>
-              {deuda.ajeno && deuda.pendiente > 0 && (
-                <Button mode="contained-tonal" icon="hand-coin" style={styles.boton} onPress={() => setTomando(true)}>
-                  Tomar prestado de aquí
-                </Button>
-              )}
-              {!deuda.cerrada && deuda.pendiente > 0 && (
-                <Button mode="contained" icon="cash-plus" style={styles.boton} onPress={() => setPagando(true)}>
-                  {deuda.ajeno ? `Entregar o gastar lo de ${deuda.persona}` : deuda.origen_ajeno_id ? 'Devolver' : meDeben ? 'Registrar cobro' : 'Registrar pago'}
-                </Button>
+              {deuda.ajeno ? (
+                <>
+                  <View style={styles.filaBotones}>
+                    <Button mode="contained" icon="arrow-down" style={styles.flex} onPress={() => setEntrando(true)}>
+                      Le entró dinero
+                    </Button>
+                    <Button
+                      mode="contained"
+                      icon="arrow-up"
+                      style={styles.flex}
+                      disabled={deuda.pendiente <= 0}
+                      onPress={() => setPagando(true)}
+                    >
+                      Salió de lo suyo
+                    </Button>
+                  </View>
+                  {deuda.pendiente > 0 && (
+                    <Button mode="text" icon="hand-coin" style={styles.boton} onPress={() => setTomando(true)}>
+                      Tomé prestado de lo suyo
+                    </Button>
+                  )}
+                </>
+              ) : (
+                !deuda.cerrada &&
+                deuda.pendiente > 0 && (
+                  <Button mode="contained" icon="cash-plus" style={styles.boton} onPress={() => setPagando(true)}>
+                    {deuda.origen_ajeno_id ? 'Devolver' : meDeben ? 'Registrar cobro' : 'Registrar pago'}
+                  </Button>
+                )
               )}
             </View>
           ) : undefined
@@ -190,6 +219,19 @@ export default function DetalleDeuda() {
           visible={pagando}
           onCerrar={(guardado) => {
             setPagando(false);
+            if (guardado) {
+              cargar();
+              setVersion((v) => v + 1);
+            }
+          }}
+        />
+      )}
+      {deuda?.ajeno && (
+        <DialogoEntradaAjeno
+          ajeno={deuda}
+          visible={entrando}
+          onCerrar={(guardado) => {
+            setEntrando(false);
             if (guardado) {
               cargar();
               setVersion((v) => v + 1);
@@ -218,4 +260,6 @@ const styles = StyleSheet.create({
   acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   boton: { marginHorizontal: 16, marginBottom: 8 },
   historial: { gap: 2 },
+  flex: { flex: 1 },
+  filaBotones: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 8 },
 });

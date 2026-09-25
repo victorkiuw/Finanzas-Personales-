@@ -17,7 +17,6 @@ import {
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import {
   actualizarDeuda,
-  ajenoYaEnSaldo,
   billeteraDeDeuda,
   crearDeuda,
   LARGO_MAXIMO_PERSONA,
@@ -43,26 +42,13 @@ function aClaveFecha(d: Date): string {
  * Nueva deuda/préstamo o edición completa de una existente (el movimiento del
  * préstamo en la billetera se ajusta solo).
  */
-type Modo = TipoDeuda | 'AJENO';
-
-export function FormularioDeuda({
-  id,
-  ajenoInicial = false,
-  billeteraInicial = null,
-}: {
-  id?: number;
-  /** Abrir directamente como "dinero de otro". */
-  ajenoInicial?: boolean;
-  billeteraInicial?: number | null;
-}) {
+export function FormularioDeuda({ id }: { id?: number }) {
   const db = useSQLiteContext();
   const tema = useTheme();
   const editando = id !== undefined;
   const [cargando, setCargando] = useState(true);
   const [billeteras, setBilleteras] = useState<Billetera[]>([]);
-  const [modo, setModo] = useState<Modo>(ajenoInicial ? 'AJENO' : 'ME_DEBEN');
-  // Dinero ajeno: ¿ya estaba en la billetera o entra ahora?
-  const [yaEnSaldo, setYaEnSaldo] = useState(true);
+  const [tipo, setTipo] = useState<TipoDeuda>('ME_DEBEN');
   // Deuda que nació de tomar prestado de lo que guardo: no mueve saldos.
   const [deAjeno, setDeAjeno] = useState(false);
   const [persona, setPersona] = useState('');
@@ -76,26 +62,27 @@ export function FormularioDeuda({
   const [fecha, setFecha] = useState(() => new Date());
   const [fechaLimite, setFechaLimite] = useState<string | null>(null);
   const [nota, setNota] = useState('');
-  const [billeteraId, setBilleteraId] = useState<number | null>(billeteraInicial);
+  const [billeteraId, setBilleteraId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [tienePagos, setTienePagos] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const lista = await listarBilleteras(db);
-      setBilleteras(lista);
-      const inicial = lista.find((b) => b.id === billeteraInicial);
-      if (id === undefined && inicial) setMoneda(inicial.moneda);
+      setBilleteras(await listarBilleteras(db));
       if (id !== undefined) {
         const d = await obtenerDeuda(db, id);
         if (!d) {
           router.back();
           return;
         }
-        setModo(d.ajeno ? 'AJENO' : d.tipo);
+        if (d.ajeno) {
+          // El dinero de otras personas tiene su propio formulario.
+          router.replace(`/ajeno/editar/${id}`);
+          return;
+        }
+        setTipo(d.tipo);
         setDeAjeno(d.origen_ajeno_id !== null);
-        if (d.ajeno) setYaEnSaldo(await ajenoYaEnSaldo(db, id));
         setPersona(d.persona);
         setMoneda(d.moneda);
         setMontoTexto(centimosATexto(d.monto));
@@ -109,12 +96,12 @@ export function FormularioDeuda({
       }
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
-  }, [db, id, billeteraInicial]);
+  }, [db, id]);
 
   // Tasas BCV y USDT del día del préstamo (del historial); la de la referencia elegida se pone sola.
   const dia = claveDia(fecha.toISOString());
   useEffect(() => {
-    if (moneda !== 'BS' || cargando || modo === 'AJENO') return;
+    if (moneda !== 'BS' || cargando) return;
     let vigente = true;
     Promise.all(PARES.map((p) => tasaDelDia(db, p, dia)))
       .then(([bcv, usdt]) => {
@@ -128,14 +115,12 @@ export function FormularioDeuda({
     return () => {
       vigente = false;
     };
-  }, [db, dia, moneda, referencia, cargando, tasaElegida, versionHistorial, modo]);
+  }, [db, dia, moneda, referencia, cargando, tasaElegida, versionHistorial]);
 
   const monto = parsearMonto(montoTexto);
   const tasa = parsearTasa(tasaTexto);
   // Si se prestaron bolívares, se devuelven bolívares al valor del dólar del día: siempre lleva tasa.
-  const ajeno = modo === 'AJENO';
-  const tipo: TipoDeuda = modo === 'AJENO' ? 'DEBO' : modo;
-  const usaTasa = moneda === 'BS' && !ajeno;
+  const usaTasa = moneda === 'BS';
   const enDolares = usaTasa && monto && monto > 0 && tasa ? totalEnUnidad(monto, 'BS', tasa) : null;
   const billeterasMoneda = billeteras.filter((b) => b.moneda === moneda);
 
@@ -172,10 +157,6 @@ export function FormularioDeuda({
       setError('Escribe el monto.');
       return;
     }
-    if (ajeno && !billeteraId) {
-      setError('Elige en qué billetera guardas ese dinero.');
-      return;
-    }
     if (usaTasa && !tasa) {
       setError('Escribe a cuánto estaba el dólar el día del préstamo.');
       return;
@@ -189,11 +170,9 @@ export function FormularioDeuda({
         monto,
         tasa_referencia: usaTasa ? tasa : null,
         fecha: fecha.toISOString(),
-        fecha_limite: ajeno ? null : fechaLimite,
+        fecha_limite: fechaLimite,
         nota,
         billetera_id: deAjeno ? null : billeteraId,
-        ajeno,
-        ya_en_saldo: ajeno ? yaEnSaldo : undefined,
       };
       if (editando) {
         await actualizarDeuda(db, id, datos);
@@ -215,28 +194,17 @@ export function FormularioDeuda({
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen
-        options={{
-          title: ajeno ? (editando ? 'Editar dinero de otro' : 'Dinero de otra persona') : editando ? 'Editar deuda' : 'Nueva deuda o préstamo',
-        }}
-      />
+      <Stack.Screen options={{ title: editando ? 'Editar deuda' : 'Nueva deuda o préstamo' }} />
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
         {!deAjeno && (
           <SegmentedButtons
-            value={modo}
-            onValueChange={(v) => setModo(v as Modo)}
+            value={tipo}
+            onValueChange={(v) => setTipo(v as TipoDeuda)}
             buttons={[
-              { value: 'ME_DEBEN', label: 'Presté', disabled: tienePagos },
+              { value: 'ME_DEBEN', label: 'Presté (me deben)', disabled: tienePagos },
               { value: 'DEBO', label: 'Me prestaron', disabled: tienePagos },
-              { value: 'AJENO', label: 'Es de otro', disabled: tienePagos },
             ]}
           />
-        )}
-        {ajeno && (
-          <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-            Dinero de otra persona que tienes en una de tus cuentas (por ejemplo, lo de tu abuela en Binance). No se
-            cuenta como tuyo en lo disponible.
-          </Text>
         )}
         {deAjeno && (
           <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
@@ -251,7 +219,7 @@ export function FormularioDeuda({
         )}
 
         <TextInput
-          label={ajeno ? '¿De quién es el dinero?' : meDeben ? '¿A quién le prestaste?' : '¿Quién te prestó?'}
+          label={meDeben ? '¿A quién le prestaste?' : '¿Quién te prestó?'}
           value={persona}
           onChangeText={setPersona}
           maxLength={LARGO_MAXIMO_PERSONA}
@@ -259,36 +227,6 @@ export function FormularioDeuda({
           autoFocus={!editando}
         />
 
-        {ajeno && (
-          <View style={styles.bloque}>
-            <Text variant="labelLarge">¿En qué billetera lo tienes?</Text>
-            <SelectorBilletera
-              billeteras={billeteras}
-              valor={billeteraId}
-              onCambio={(b) => {
-                setBilleteraId(b);
-                const m = billeteras.find((x) => x.id === b)?.moneda;
-                if (m) setMoneda(m);
-              }}
-            />
-            <Text variant="labelLarge">¿Cómo llegó ese dinero?</Text>
-            <View style={styles.chips}>
-                <Chip compact selected={yaEnSaldo} showSelectedCheck={false} mode={yaEnSaldo ? 'flat' : 'outlined'} onPress={() => setYaEnSaldo(true)}>
-                  Ya está en el saldo
-                </Chip>
-                <Chip compact selected={!yaEnSaldo} showSelectedCheck={false} mode={!yaEnSaldo ? 'flat' : 'outlined'} onPress={() => setYaEnSaldo(false)}>
-                  Me lo acaba de dar (sumarlo)
-                </Chip>
-            </View>
-            <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-              {yaEnSaldo
-                ? 'El saldo de la billetera no cambia: solo se aparta lo que es de esa persona.'
-                : 'Se suma al saldo de la billetera como un dinero que entró.'}
-            </Text>
-          </View>
-        )}
-
-        {!ajeno && (
         <View style={styles.bloque}>
           <Text variant="labelLarge">{meDeben ? '¿Qué le prestaste?' : '¿Qué te prestaron?'}</Text>
           <SegmentedButtons
@@ -302,7 +240,6 @@ export function FormularioDeuda({
               : `Se devuelve lo mismo en ${INFO_MONEDA[moneda].nombre.toLowerCase()}.`}
           </Text>
         </View>
-        )}
         <View>
           <TextInput
             label="Monto"
@@ -316,7 +253,7 @@ export function FormularioDeuda({
         </View>
 
         <Button mode="outlined" icon="calendar" onPress={() => elegirFecha('prestamo')}>
-          {`${ajeno ? 'Lo tienes desde el' : meDeben ? 'Le prestaste el' : 'Te prestó el'} ${formatearFechaCorta(fecha)}`}
+          {`${meDeben ? 'Le prestaste' : 'Te prestó'} el ${formatearFechaCorta(fecha)}`}
         </Button>
 
         {usaTasa && (
@@ -357,7 +294,7 @@ export function FormularioDeuda({
           </View>
         )}
 
-        {!ajeno && !deAjeno && (
+        {!deAjeno && (
         <View style={styles.bloque}>
           <Text variant="labelLarge">{meDeben ? '¿De qué billetera salió el dinero?' : '¿A qué billetera entró?'}</Text>
           {billeterasMoneda.length > 0 ? (
@@ -382,14 +319,12 @@ export function FormularioDeuda({
         </View>
         )}
 
-        {!ajeno && (
         <View style={styles.filaSwitch}>
           <Button mode="outlined" icon="calendar-clock" onPress={() => elegirFecha('limite')} style={styles.flex}>
             {fechaLimite ? `Pagar antes del ${fechaSimpleLegible(fechaLimite)}` : 'Fecha límite (opcional)'}
           </Button>
           {fechaLimite && <Button onPress={() => setFechaLimite(null)}>Quitar</Button>}
         </View>
-        )}
 
         <TextInput label="Nota (opcional)" value={nota} onChangeText={setNota} mode="outlined" multiline />
 

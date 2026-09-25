@@ -53,10 +53,10 @@ export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: P
     return (
       <View style={styles.resumen}>
         <Text variant="bodyMedium">
-          {`Es dinero de ${d.persona} que tienes${d.billetera_nombre ? ` en ${d.billetera_nombre}` : ''} desde el ${fechaCorta}. No cuenta como tuyo.`}
+          {`Le prestaste tu cuenta${d.billetera_nombre ? ` de ${d.billetera_nombre}` : ''} desde el ${fechaCorta}. No cuenta como tuyo.`}
         </Text>
         <Text variant="labelLarge" style={[suave, styles.titulo]}>
-          {d.cerrada || d.pendiente === 0 ? 'Ya se lo entregaste todo.' : 'Hoy le guardas:'}
+          {d.cerrada || d.pendiente === 0 ? 'Ahora no tienes nada suyo.' : `Es de ${d.persona}:`}
         </Text>
         {d.pendiente > 0 && !d.cerrada && (
           <Text variant="headlineSmall" style={styles.cifra}>
@@ -139,7 +139,7 @@ export function TarjetaDeuda({ deuda, tasas, referencia, onPress }: Omit<Props, 
             {...p}
             icon="pencil"
             accessibilityLabel={`Editar la deuda de ${deuda.persona}`}
-            onPress={() => router.push(`/deuda/editar/${deuda.id}`)}
+            onPress={() => router.push(deuda.ajeno ? `/ajeno/editar/${deuda.id}` : `/deuda/editar/${deuda.id}`)}
           />
         )}
       />

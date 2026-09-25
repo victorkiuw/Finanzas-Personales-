@@ -28,10 +28,12 @@ function titulo(m: Movimiento): string {
     case 'PRESTAMO_DADO':
       return `Préstamo a ${m.deuda_persona ?? '…'}`;
     case 'PRESTAMO_RECIBIDO':
+      if (m.deuda_ajeno) return `Entró para ${m.deuda_persona ?? '…'}`;
       return `Préstamo de ${m.deuda_persona ?? '…'}`;
     case 'COBRO_DEUDA':
       return `Te pagó ${m.deuda_persona ?? '…'}`;
     case 'PAGO_DEUDA':
+      if (m.deuda_ajeno) return `Salió de lo de ${m.deuda_persona ?? '…'}`;
       return `Pago a ${m.deuda_persona ?? '…'}`;
     default:
       return m.categoria_nombre ?? 'Sin categoría';

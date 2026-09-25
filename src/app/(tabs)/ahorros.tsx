@@ -12,7 +12,6 @@ import { listarDeudas, resumenDeudas, type Deuda } from '../../db/deudas';
 import { listarMetas, type Meta } from '../../db/metas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
 import { actualizarAvisosVencimientos } from '../../lib/avisos';
-import { totalConsolidado } from '../../lib/conversion';
 import { formatearMonto } from '../../lib/moneda';
 
 type Seccion = 'metas' | 'deudas' | 'cuotas';
@@ -57,31 +56,7 @@ export default function PantallaAhorros() {
 
   if (seccion === 'deudas') {
     const abiertas = deudas.filter((d) => !d.cerrada && !d.ajeno);
-    const saldadas = deudas.filter((d) => d.cerrada);
-    const ajenas = deudas.filter((d) => !d.cerrada && d.ajeno);
-    const totalAjeno = totalConsolidado(
-      ajenas.map((d) => ({ moneda: d.unidad, saldo: d.pendiente })),
-      'USD',
-      cambio,
-    );
-    const deOtros = (
-      <View>
-        <Text variant="titleMedium" style={styles.subtitulo}>
-          Dinero de otros
-        </Text>
-        <Text variant="bodySmall" style={[styles.explicacion, { color: tema.colors.onSurfaceVariant }]}>
-          {ajenas.length > 0
-            ? `Lo que guardas de otras personas en tus cuentas${totalAjeno !== null ? ` (≈ ${formatearMonto(totalAjeno, 'USD')})` : ''}. No cuenta en tu disponible.`
-            : '¿Tienes en tus cuentas dinero de tu familia u otra persona? Regístralo para que no cuente como tuyo.'}
-        </Text>
-        {ajenas.map((d) => (
-          <TarjetaDeuda key={d.id} deuda={d} tasas={tasas} referencia={referencia} onPress={() => router.push(`/deuda/${d.id}`)} />
-        ))}
-        <Button mode="outlined" icon="account-cash" style={styles.botonAjeno} onPress={() => router.push('/deuda/nueva?ajeno=1')}>
-          Guardo dinero de otra persona
-        </Button>
-      </View>
-    );
+    const saldadas = deudas.filter((d) => d.cerrada && !d.ajeno);
     const resumen = resumenDeudas(abiertas, cambio);
     return (
       <View style={styles.flex}>
@@ -137,7 +112,6 @@ export default function PantallaAhorros() {
           }
           ListFooterComponent={
             <>
-            {deOtros}
             {saldadas.length > 0 ? (
               <List.Accordion
                 title={`Saldadas (${saldadas.length})`}
@@ -217,8 +191,5 @@ const styles = StyleSheet.create({
   cifra: { fontVariant: ['tabular-nums'], fontWeight: '700' },
   vacio: { padding: 24, gap: 12, marginTop: 16 },
   centrado: { textAlign: 'center' },
-  subtitulo: { marginHorizontal: 16, marginTop: 16 },
-  explicacion: { marginHorizontal: 16, marginBottom: 8 },
-  botonAjeno: { marginHorizontal: 16, marginBottom: 16, alignSelf: 'flex-start' },
   fab: { position: 'absolute', right: 16, bottom: 16 },
 });

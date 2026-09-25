@@ -422,13 +422,15 @@ export function FormularioMovimiento({
       <View style={styles.contenido}>
         <Stack.Screen options={{ title: titulo }} />
         <Text variant="bodyLarge">
-          {`${formatearMonto(original.monto, original.origen_moneda)} ${entra ? 'entraron a' : 'salieron de'} ${original.origen_nombre} por la deuda con ${original.deuda_persona}.`}
+          {`${formatearMonto(original.monto, original.origen_moneda)} ${entra ? 'entraron a' : 'salieron de'} ${original.origen_nombre} ${original.deuda_ajeno ? 'con el dinero de' : 'por la deuda con'} ${original.deuda_persona}.`}
         </Text>
         <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
-          Los movimientos de deudas se gestionan desde la deuda; si te equivocaste, elimínalo y regístralo de nuevo.
+          {original.deuda_ajeno
+            ? 'Se gestiona desde el dinero de esa persona; si te equivocaste, elimínalo y regístralo de nuevo.'
+            : 'Los movimientos de deudas se gestionan desde la deuda; si te equivocaste, elimínalo y regístralo de nuevo.'}
         </Text>
-        <Button mode="outlined" icon="handshake" onPress={() => router.replace(`/deuda/${original.deuda_id}`)}>
-          Ver la deuda
+        <Button mode="outlined" icon={original.deuda_ajeno ? 'account-cash' : 'handshake'} onPress={() => router.replace(`/deuda/${original.deuda_id}`)}>
+          {original.deuda_ajeno ? `Ver el dinero de ${original.deuda_persona}` : 'Ver la deuda'}
         </Button>
         <Button mode="text" icon="delete" textColor={tema.colors.error} onPress={confirmarEliminar}>
           Eliminar movimiento

@@ -7,10 +7,12 @@ import { formatearMonto, INFO_MONEDA } from '../lib/moneda';
 
 interface Props {
   billetera: Billetera;
+  /** Parte del saldo que es de otras personas. */
+  deOtros?: number;
   onPress: () => void;
 }
 
-export function TarjetaBilletera({ billetera, onPress }: Props) {
+export function TarjetaBilletera({ billetera, deOtros, onPress }: Props) {
   const tema = useTheme();
   const negativo = billetera.saldo < 0;
   // Las billeteras guardadas aparte muestran el saldo oculto hasta tocar el ojo.
@@ -40,6 +42,11 @@ export function TarjetaBilletera({ billetera, onPress }: Props) {
             {billetera.archivada ? ' · Archivada' : ''}
             {!billetera.en_total ? ' · Aparte, no suma al total' : ''}
           </Text>
+          {deOtros && !oculta ? (
+            <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+              {`De otros: ${formatearMonto(deOtros, billetera.moneda)} · tuyo: ${formatearMonto(billetera.saldo - deOtros, billetera.moneda)}`}
+            </Text>
+          ) : null}
         </View>
         <Text
           variant="titleMedium"

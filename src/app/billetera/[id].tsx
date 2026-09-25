@@ -72,9 +72,9 @@ export default function DetalleBilletera() {
             mode="text"
             icon="account-plus"
             style={styles.izquierda}
-            onPress={() => router.push(`/deuda/nueva?ajeno=1&billetera=${billeteraId}`)}
+            onPress={() => router.push(`/ajeno/nuevo?billetera=${billeteraId}`)}
           >
-            Parte de este dinero es de otra persona
+            Le presté esta cuenta a alguien
           </Button>
         )}
       </Card>

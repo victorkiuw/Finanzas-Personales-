@@ -182,15 +182,15 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
     <Portal>
       <Dialog visible={visible} onDismiss={() => onCerrar(false)} style={{ marginBottom: alturaTeclado }}>
         <Dialog.Title>
-          {deuda.ajeno ? `Entregar a ${deuda.persona}` : guardado ? `Devolver a ${deuda.persona}` : meDeben ? `Cobro a ${deuda.persona}` : `Pago a ${deuda.persona}`}
+          {deuda.ajeno ? `Salió de lo de ${deuda.persona}` : guardado ? `Devolver a ${deuda.persona}` : meDeben ? `Cobro a ${deuda.persona}` : `Pago a ${deuda.persona}`}
         </Dialog.Title>
         <Dialog.ScrollArea style={[styles.area, { maxHeight: Math.max(altoPantalla - alturaTeclado - 260, 160) }]}>
           <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
             <Text variant="bodyMedium">
-              {`${deuda.ajeno ? 'Le guardas' : 'Pendiente'}: ${formatearMonto(deuda.pendiente, deuda.unidad)}`}
+              {`${deuda.ajeno ? `Es de ${deuda.persona}` : 'Pendiente'}: ${formatearMonto(deuda.pendiente, deuda.unidad)}`}
             </Text>
             {deuda.ajeno && (
-              <Text variant="bodySmall">Lo que le das o gastas por esa persona sale de tu billetera y deja de guardarse.</Text>
+              <Text variant="bodySmall">Lo que pagó, retiró o le transferiste: sale de tu billetera y baja lo suyo.</Text>
             )}
             {guardado && (
               <>
@@ -208,7 +208,7 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
                       setEquivalenteTexto('');
                     }}
                   >
-                    {`A lo que le guardo en ${guardado.billetera_nombre}`}
+                    {`A lo suyo en ${guardado.billetera_nombre}`}
                   </Chip>
                   <Chip
                     compact
