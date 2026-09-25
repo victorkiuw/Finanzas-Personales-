@@ -9,22 +9,36 @@ import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billete
 import { listarCategorias, type Categoria } from '../db/categorias';
 import { crearCompra, DIAS_ENTRE_CUOTAS, montosCuotas, ultimaInicialPct } from '../db/cuotas';
 import { formatearFechaCorta } from '../lib/fechas';
-import { formatearMonto, parsearMonto } from '../lib/moneda';
+import { centimosATexto, formatearMonto, parsearMonto } from '../lib/moneda';
 import { PagoDesdeBilletera } from './PagoDesdeBilletera';
 import { SelectorCategoria } from './SelectorCategoria';
 
 const OPCIONES_CUOTAS = [1, 3, 6, 12];
 
-/** Nueva compra a cuotas (Cashea): total en dólares, inicial, cuotas cada 14 días. */
-export function FormularioCompraCuotas() {
+/**
+ * Nueva compra a cuotas (Cashea): total en dólares, inicial, cuotas cada 14 días.
+ * Puede venir prellenada desde "Nuevo movimiento" al marcar "Pagué con Cashea".
+ */
+export function FormularioCompraCuotas({
+  totalInicial,
+  categoriaInicial,
+  descripcionInicial,
+  billeteraInicial,
+}: {
+  /** Céntimos de dólar. */
+  totalInicial?: number;
+  categoriaInicial?: number;
+  descripcionInicial?: string;
+  billeteraInicial?: number;
+} = {}) {
   const db = useSQLiteContext();
   const tema = useTheme();
   const [cargando, setCargando] = useState(true);
   const [billeteras, setBilleteras] = useState<Billetera[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [comercio, setComercio] = useState('');
-  const [descripcion, setDescripcion] = useState('');
-  const [totalTexto, setTotalTexto] = useState('');
+  const [descripcion, setDescripcion] = useState(descripcionInicial ?? '');
+  const [totalTexto, setTotalTexto] = useState(totalInicial ? centimosATexto(totalInicial) : '');
   const [enPorcentaje, setEnPorcentaje] = useState(true);
   const [inicialTexto, setInicialTexto] = useState('');
   const [cuotas, setCuotas] = useState(3);
@@ -41,13 +55,15 @@ export function FormularioCompraCuotas() {
       const [b, c, pct] = await Promise.all([listarBilleteras(db), listarCategorias(db, 'GASTO'), ultimaInicialPct(db)]);
       setBilleteras(b);
       setCategorias(c);
-      setBilleteraId(b[0]?.id ?? null);
-      setCategoriaId(c.find((x) => x.nombre === 'Otros gastos')?.id ?? c[0]?.id ?? null);
+      setBilleteraId((b.find((x) => x.id === billeteraInicial) ?? b[0])?.id ?? null);
+      setCategoriaId(
+        (c.find((x) => x.id === categoriaInicial) ?? c.find((x) => x.nombre === 'Otros gastos') ?? c[0])?.id ?? null,
+      );
       // Se propone la inicial usada la última vez.
       if (pct !== null) setInicialTexto(String(pct));
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
-  }, [db]);
+  }, [db, billeteraInicial, categoriaInicial]);
 
   const total = parsearMonto(totalTexto);
   const pct = Number(inicialTexto.trim().replace(',', '.'));

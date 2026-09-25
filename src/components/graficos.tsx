@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Avatar, Text, useTheme } from 'react-native-paper';
+import { Avatar, Icon, Text, useTheme } from 'react-native-paper';
 
 import type { TotalCategoria, TotalMes } from '../db/reportes';
 import { formatearMonto, type Moneda } from '../lib/moneda';
@@ -16,9 +16,23 @@ export function coloresSeries(oscuro: boolean) {
 
 const MAX_CATEGORIAS = 6;
 
-/** Gastos por categoría como barras horizontales ordenadas (parte del total). */
-export function BarrasCategorias({ categorias, moneda }: { categorias: TotalCategoria[]; moneda: Moneda }) {
+/**
+ * Gastos por categoría como barras horizontales ordenadas (parte del total).
+ * Barras de gastos por categoría. Si se pasa `detalle`, tocar una categoría la
+ * despliega debajo (sus gastos) y tocar "Otras" muestra todas las categorías.
+ */
+export function BarrasCategorias({
+  categorias,
+  moneda,
+  detalle,
+}: {
+  categorias: TotalCategoria[];
+  moneda: Moneda;
+  detalle?: (categoriaId: number) => ReactNode;
+}) {
   const tema = useTheme();
+  const [elegida, setElegida] = useState<number | null>(null);
+  const [todas, setTodas] = useState(false);
   const total = categorias.reduce((s, c) => s + c.total, 0);
   if (total <= 0) {
     return (
@@ -28,8 +42,8 @@ export function BarrasCategorias({ categorias, moneda }: { categorias: TotalCate
     );
   }
   // Más de 6 categorías: el resto se agrupa en "Otras" para que la lista siga legible.
-  const visibles = categorias.slice(0, MAX_CATEGORIAS);
-  const resto = categorias.slice(MAX_CATEGORIAS).reduce((s, c) => s + c.total, 0);
+  const visibles = todas ? categorias : categorias.slice(0, MAX_CATEGORIAS);
+  const resto = todas ? 0 : categorias.slice(MAX_CATEGORIAS).reduce((s, c) => s + c.total, 0);
   const filas = resto > 0
     ? [...visibles, { id: -1, nombre: 'Otras', icono: 'dots-horizontal', color: tema.colors.outline, total: resto }]
     : visibles;
@@ -39,8 +53,21 @@ export function BarrasCategorias({ categorias, moneda }: { categorias: TotalCate
     <View style={styles.lista}>
       {filas.map((c) => {
         const porcentaje = Math.round((c.total / total) * 100);
+        const abierta = elegida === c.id;
+        const tocar = () => {
+          if (c.id === -1) setTodas(true);
+          else setElegida(abierta ? null : c.id);
+        };
         return (
-          <View key={c.id} style={styles.filaCategoria} accessible accessibilityLabel={`${c.nombre}: ${formatearMonto(c.total, moneda)}, ${porcentaje}%`}>
+          <View key={c.id}>
+          <Pressable
+            style={styles.filaCategoria}
+            disabled={!detalle}
+            onPress={tocar}
+            accessibilityRole={detalle ? 'button' : undefined}
+            accessibilityState={detalle ? { expanded: abierta } : undefined}
+            accessibilityLabel={`${c.nombre}: ${formatearMonto(c.total, moneda)}, ${porcentaje}%`}
+          >
             <Avatar.Icon size={32} icon={c.icono} color="#FFFFFF" style={{ backgroundColor: c.color }} />
             <View style={styles.flex}>
               <View style={styles.filaTextos}>
@@ -63,6 +90,11 @@ export function BarrasCategorias({ categorias, moneda }: { categorias: TotalCate
                 />
               </View>
             </View>
+            {detalle && (
+              <Icon source={c.id === -1 ? 'chevron-down' : abierta ? 'chevron-up' : 'chevron-right'} size={20} color={tema.colors.onSurfaceVariant} />
+            )}
+          </Pressable>
+          {abierta && detalle ? detalle(c.id) : null}
           </View>
         );
       })}

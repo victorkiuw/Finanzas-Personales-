@@ -8,6 +8,7 @@ import { AvisosDetectados } from '../../components/AvisosDetectados';
 import { CintaTasas } from '../../components/CintaTasas';
 import { DialogoDictado } from '../../components/DialogoDictado';
 import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
+import { GastosDeCategoria } from '../../components/GastosDeCategoria';
 import { GraficoLineas } from '../../components/GraficoLineas';
 import { BarrasCategorias, ColumnasMensuales, coloresSeries } from '../../components/graficos';
 import { ItemMovimiento } from '../../components/ItemMovimiento';
@@ -352,9 +353,13 @@ export default function PantallaInicio() {
           </Card>
 
           <Card mode="outlined">
-            <Card.Title title="Gastos por categoría" />
+            <Card.Title title="Gastos por categoría" subtitle="Toca una para ver sus gastos" />
             <Card.Content>
-              <BarrasCategorias categorias={resumen.gastosPorCategoria} moneda={monedaBase} />
+              <BarrasCategorias
+                categorias={resumen.gastosPorCategoria}
+                moneda={monedaBase}
+                detalle={(id) => <GastosDeCategoria categoriaId={id} {...rangoMes(mes)} />}
+              />
             </Card.Content>
           </Card>
 

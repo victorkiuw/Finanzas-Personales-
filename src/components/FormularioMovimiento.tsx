@@ -20,6 +20,8 @@ import {
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
 import { dividirGasto, partesIguales, type ParteDivision } from '../db/dividir';
+import { cambioDe } from '../db/tasas';
+import { convertir } from '../lib/conversion';
 import { crearPlantilla } from '../db/plantillas';
 import { listarCategorias, type Categoria } from '../db/categorias';
 import {
@@ -104,6 +106,8 @@ export function FormularioMovimiento({
   const [comisionTexto, setComisionTexto] = useState('');
   // Dividir el gasto con otras personas (lo de ellas queda como préstamo).
   const [dividir, setDividir] = useState(false);
+  // Pagué con Cashea: en vez de un gasto se registra una compra a cuotas.
+  const [cashea, setCashea] = useState(false);
   // Foto del comprobante (ruta local) y si se está viendo en grande.
   const [comprobante, setComprobante] = useState<string | null>(null);
   const [verComprobante, setVerComprobante] = useState(false);
@@ -276,7 +280,8 @@ export function FormularioMovimiento({
   const aMano = aQuien === 'OTRA' && comisionTexto.trim() !== '';
   const comision = !comisionActiva ? 0 : aMano ? parsearMonto(comisionTexto) : comisionAuto;
 
-  const dividiendo = !editando && tipo === 'GASTO' && dividir;
+  const usaCashea = !editando && tipo === 'GASTO' && cashea;
+  const dividiendo = !editando && tipo === 'GASTO' && dividir && !cashea;
   const deOtros = partes.reduce((suma, p) => suma + (parsearMonto(p.montoTexto) ?? 0), 0);
   const tuParte = monto !== null && monto > 0 ? monto - deOtros : null;
 
@@ -304,7 +309,25 @@ export function FormularioMovimiento({
     }
   };
 
+  /** Pasa a "Nueva compra a cuotas" con lo ya escrito (el total en dólares a tasa BCV, la de Cashea). */
+  const seguirEnCashea = () => {
+    const usd = monto && monto > 0 && origen ? convertir(monto, origen.moneda, 'USD', cambioDe(tasas, 'BCV')) : null;
+    router.replace({
+      pathname: '/cuota/nueva',
+      params: {
+        total: usd ? String(usd) : '',
+        categoria: categoriaId ? String(categoriaId) : '',
+        descripcion: nota.trim(),
+        billetera: origenId ? String(origenId) : '',
+      },
+    });
+  };
+
   const guardar = async () => {
+    if (usaCashea) {
+      seguirEnCashea();
+      return;
+    }
     if (!monto || monto <= 0) {
       setError('Escribe un monto mayor que cero.');
       return;
@@ -563,7 +586,21 @@ export function FormularioMovimiento({
           </View>
         )}
 
-        {!editando && tipo === 'GASTO' && origen && (
+        {!editando && tipo === 'GASTO' && (
+          <View style={styles.filaSwitch}>
+            <View style={styles.flex}>
+              <Text variant="labelLarge">Pagué con Cashea</Text>
+              <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                {cashea
+                  ? 'Escribe el precio total de la compra. Al tocar "Seguir en Cashea" eliges la inicial (sale de la billetera elegida) y las cuotas.'
+                  : 'Se registra como compra a cuotas en vez de un gasto normal.'}
+              </Text>
+            </View>
+            <Switch value={cashea} onValueChange={setCashea} accessibilityLabel="Pagué con Cashea" />
+          </View>
+        )}
+
+        {!editando && tipo === 'GASTO' && origen && !cashea && (
           <View style={styles.bloque}>
             <View style={styles.filaSwitch}>
               <View style={styles.flex}>
@@ -629,7 +666,7 @@ export function FormularioMovimiento({
           </View>
         )}
 
-        {admiteComision && origen && (
+        {admiteComision && origen && !usaCashea && (
           <View style={styles.bloque}>
             <View style={styles.filaSwitch}>
               <View style={styles.flex}>
@@ -748,13 +785,21 @@ export function FormularioMovimiento({
 
         {error && <HelperText type="error">{error}</HelperText>}
 
-        {!editando && tipo !== 'TRANSFERENCIA' && (
+        {!editando && tipo !== 'TRANSFERENCIA' && !usaCashea && (
           <Button mode="text" icon="lightning-bolt" onPress={guardarComoRapido}>
             Guardar como movimiento rápido
           </Button>
         )}
-        <Button mode="contained" buttonColor={COLOR_TIPO[tipo]} textColor="#FFFFFF" onPress={guardar} loading={guardando} disabled={guardando}>
-          Guardar
+        <Button
+          mode="contained"
+          buttonColor={COLOR_TIPO[tipo]}
+          textColor="#FFFFFF"
+          icon={usaCashea ? 'cart-arrow-right' : undefined}
+          onPress={guardar}
+          loading={guardando}
+          disabled={guardando}
+        >
+          {usaCashea ? 'Seguir en Cashea' : 'Guardar'}
         </Button>
         {editando && (
           <Button mode="text" icon="delete" textColor={tema.colors.error} onPress={confirmarEliminar}>
