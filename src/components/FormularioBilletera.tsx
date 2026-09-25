@@ -70,7 +70,8 @@ export function FormularioBilletera({ id }: Props) {
       setOriginal(b);
       setNombre(b.nombre);
       setMoneda(b.moneda);
-      setSaldoTexto(centimosATexto(b.balance_inicial));
+      // Al editar se muestra el saldo de hoy (con todos los movimientos), no el inicial.
+      setSaldoTexto(centimosATexto(b.saldo));
       setIcono(b.icono);
       setColor(b.color_hex);
       setComisionPct(porcentajeATexto(b.comision_porcentaje));
@@ -82,14 +83,15 @@ export function FormularioBilletera({ id }: Props) {
     })().catch((e) => Alert.alert('Error', String(e)));
   }, [db, id]);
 
-  const saldoInicial = saldoTexto.trim() === '' ? 0 : parsearMonto(saldoTexto);
+  // Creando es el saldo inicial; editando, el saldo actual que se quiere tener.
+  const saldoEscrito = saldoTexto.trim() === '' ? 0 : parsearMonto(saldoTexto);
   const margen = margenTexto.trim() === '' ? null : Number(margenTexto.trim().replace(',', '.'));
   const margenValido = margen === null || Number.isFinite(margen);
   const monedaBloqueada = movimientos > 0;
 
   const guardar = async () => {
-    if (saldoInicial === null) {
-      setError('El saldo inicial no es un número válido.');
+    if (saldoEscrito === null) {
+      setError('El saldo no es un número válido.');
       return;
     }
     const comision = leerComision(comisionPct, comisionMin);
@@ -103,10 +105,17 @@ export function FormularioBilletera({ id }: Props) {
     }
     setGuardando(true);
     setError(null);
+    // Editando: el saldo inicial se ajusta para que el saldo de hoy sea el escrito,
+    // con los movimientos leídos justo ahora por si cambiaron mientras se editaba.
+    let balanceInicial = saldoEscrito;
+    if (id !== undefined) {
+      const actual = await obtenerBilletera(db, id);
+      if (actual) balanceInicial = saldoEscrito - (actual.saldo - actual.balance_inicial);
+    }
     const datos = {
       nombre,
       moneda,
-      balance_inicial: saldoInicial,
+      balance_inicial: balanceInicial,
       icono,
       color_hex: color,
       comision_porcentaje: comision.porcentaje,
@@ -191,7 +200,7 @@ export function FormularioBilletera({ id }: Props) {
 
         <View>
           <TextInput
-            label="Saldo inicial"
+            label={editando ? 'Saldo actual' : 'Saldo inicial'}
             value={saldoTexto}
             onChangeText={setSaldoTexto}
             keyboardType="decimal-pad"
@@ -199,10 +208,14 @@ export function FormularioBilletera({ id }: Props) {
             mode="outlined"
             right={<TextInput.Affix text={INFO_MONEDA[moneda].corto} />}
           />
-          <HelperText type={saldoInicial === null ? 'error' : 'info'}>
-            {saldoInicial === null
+          <HelperText type={saldoEscrito === null ? 'error' : 'info'}>
+            {saldoEscrito === null
               ? 'Número no válido'
-              : `${formatearMonto(saldoInicial, moneda)} · lo que tenías antes de empezar a registrar`}
+              : !editando
+                ? `${formatearMonto(saldoEscrito, moneda)} · lo que tenías antes de empezar a registrar`
+                : original && saldoEscrito !== original.saldo
+                  ? `Pasa de ${formatearMonto(original.saldo, moneda)} a ${formatearMonto(saldoEscrito, moneda)}: se corrige sin crear un movimiento.`
+                  : `${formatearMonto(saldoEscrito, moneda)} · con todos los movimientos hasta ahora. Si tu banco dice otro saldo, escríbelo.`}
           </HelperText>
         </View>
 
