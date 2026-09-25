@@ -234,6 +234,20 @@ export async function disponibleAl(
      SELECT t.fecha, d.moneda, t.monto_destino
      FROM transacciones t JOIN billeteras d ON d.id = t.billetera_destino_id
      WHERE t.tipo = 'TRANSFERENCIA' AND d.en_total = 1
+     -- El dinero de otros que guardo no es mío: se resta desde que lo tengo y
+     -- vuelve a sumar lo que le entrego o tomo prestado.
+     UNION ALL
+     SELECT d.fecha, d.moneda, -d.monto
+     FROM deudas d JOIN billeteras b ON b.id = d.billetera_id
+     WHERE d.ajeno = 1 AND b.en_total = 1
+     UNION ALL
+     SELECT t.fecha, d.moneda, t.monto_destino
+     FROM transacciones t JOIN deudas d ON d.id = t.deuda_id JOIN billeteras b ON b.id = d.billetera_id
+     WHERE d.ajeno = 1 AND b.en_total = 1 AND t.tipo = 'PAGO_DEUDA'
+     UNION ALL
+     SELECT a.fecha, d.moneda, a.monto
+     FROM ajustes_deuda a JOIN deudas d ON d.id = a.deuda_id JOIN billeteras b ON b.id = d.billetera_id
+     WHERE d.ajeno = 1 AND b.en_total = 1
      ORDER BY 1`,
     [],
   );

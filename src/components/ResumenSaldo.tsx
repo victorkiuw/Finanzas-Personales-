@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
 
 import { totalesPorMoneda, type Billetera } from '../db/billeteras';
+import { ajenoPorBilletera, type Deuda } from '../db/deudas';
 import type { Meta } from '../db/metas';
 import { NOMBRE_PAR, PARES } from '../lib/api-tasas';
 import { totalConsolidado } from '../lib/conversion';
@@ -36,16 +37,30 @@ function Opcion({ texto, elegida, onPress }: { texto: string; elegida: boolean; 
 /**
  * Dinero disponible: las billeteras que cuentan en el total, en la moneda base
  * elegida y convertido con la tasa de referencia. Lo ahorrado en metas y las
- * billeteras "guardadas aparte" se muestran por separado, sin sumarse.
+ * billeteras "guardadas aparte" se muestran por separado, sin sumarse. El
+ * dinero de otras personas que guardo en mis billeteras se resta.
  */
-export function ResumenSaldo({ billeteras, metas = [] }: { billeteras: Billetera[]; metas?: Meta[] }) {
+export function ResumenSaldo({
+  billeteras,
+  metas = [],
+  deudas = [],
+}: {
+  billeteras: Billetera[];
+  metas?: Meta[];
+  /** Para restar el dinero de otros (solo se usan las ajenas). */
+  deudas?: Deuda[];
+}) {
   const tema = useTheme();
   const { cambio, referencia, cambiarReferencia, monedaBase, cambiarMonedaBase } = useTasas();
   const [verAparte, setVerAparte] = useState(false);
   const color = tema.colors.onPrimaryContainer;
 
   const activas = billeteras.filter((b) => !b.archivada);
-  const cuentan = activas.filter((b) => b.en_total);
+  const ajenoPor = ajenoPorBilletera(deudas);
+  // Lo que es mío de cada billetera que cuenta.
+  const cuentan = activas.filter((b) => b.en_total).map((b) => ({ ...b, saldo: b.saldo - (ajenoPor.get(b.id) ?? 0) }));
+  const deOtros = activas.filter((b) => b.en_total && ajenoPor.has(b.id)).map((b) => ({ moneda: b.moneda, saldo: ajenoPor.get(b.id)! }));
+  const totalDeOtros = deOtros.length ? totalConsolidado(deOtros, monedaBase, cambio) : null;
   const aparte = activas.filter((b) => !b.en_total);
   const ahorrado = metas.filter((m) => !m.archivada && m.saldo !== 0);
 
@@ -93,11 +108,16 @@ export function ResumenSaldo({ billeteras, metas = [] }: { billeteras: Billetera
           </View>
         ) : null}
 
-        {(ahorrado.length > 0 || aparte.length > 0) && (
+        {(ahorrado.length > 0 || aparte.length > 0 || deOtros.length > 0) && (
           <View style={[styles.aparte, { borderTopColor: tema.colors.outlineVariant }]}>
             {ahorrado.length > 0 && (
               <Text variant="bodyMedium" style={[styles.linea, { color }]}>
                 {`Ahorrado en metas: ${totalMetas !== null ? `≈ ${formatearMonto(totalMetas, monedaBase)}` : '—'}`}
+              </Text>
+            )}
+            {deOtros.length > 0 && (
+              <Text variant="bodyMedium" style={[styles.linea, { color }]}>
+                {`De otras personas: ${totalDeOtros !== null ? `≈ ${formatearMonto(totalDeOtros, monedaBase)}` : '—'}`}
               </Text>
             )}
             {aparte.length > 0 && (

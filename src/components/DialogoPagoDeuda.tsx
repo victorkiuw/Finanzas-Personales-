@@ -4,7 +4,7 @@ import { Keyboard, ScrollView, StyleSheet, useWindowDimensions, View } from 'rea
 import { Button, Chip, Dialog, HelperText, Portal, Text, TextInput } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
-import { registrarPagoDeuda, type Deuda } from '../db/deudas';
+import { devolverAAjeno, obtenerDeuda, registrarPagoDeuda, type Deuda } from '../db/deudas';
 import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
 import { calcularTasa, enviadoConTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
@@ -16,10 +16,18 @@ interface Props {
   onCerrar: (guardado: boolean) => void;
 }
 
-/** Registrar un cobro (me deben) o un pago (debo), en cualquier billetera y a la tasa pactada. */
+/**
+ * Registrar un cobro (me deben) o un pago (debo), en cualquier billetera y a la
+ * tasa pactada. Si la deuda salió de un dinero ajeno que guardo, se puede
+ * devolver "a lo que le guardo" (vuelve a ser suyo, con la transferencia si
+ * sale de otra billetera) o entregárselo.
+ */
 export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
   const db = useSQLiteContext();
-  const [billeteras, setBilleteras] = useState<Billetera[]>([]);
+  const [todas, setTodas] = useState<Billetera[]>([]);
+  // Dinero ajeno del que salió esta deuda, si es el caso.
+  const [guardado, setGuardado] = useState<Deuda | null>(null);
+  const [aGuardado, setAGuardado] = useState(true);
   const [billeteraId, setBilleteraId] = useState<number | null>(null);
   const [montoTexto, setMontoTexto] = useState('');
   const [tasaTexto, setTasaTexto] = useState('');
@@ -44,17 +52,29 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
     setTasaTexto('');
     setEquivalenteTexto('');
     setError(null);
-    listarBilleteras(db).then((b) => {
-      setBilleteras(b);
-      // Por defecto, una billetera en la moneda original del préstamo.
-      setBilleteraId((b.find((x) => x.moneda === deuda.moneda) ?? b[0])?.id ?? null);
-    });
-  }, [db, visible, deuda.moneda]);
+    setAGuardado(true);
+    (async () => {
+      const b = await listarBilleteras(db);
+      const origen = deuda.origen_ajeno_id ? await obtenerDeuda(db, deuda.origen_ajeno_id) : null;
+      const g = origen?.ajeno && origen.billetera_id && b.some((x) => x.id === origen.billetera_id) ? origen : null;
+      setTodas(b);
+      setGuardado(g);
+      // Por defecto, la billetera donde se guarda el dinero ajeno o una en la moneda original del préstamo.
+      const propia = deuda.ajeno || g ? (g ?? deuda).billetera_id : null;
+      setBilleteraId((b.find((x) => x.id === propia) ?? b.find((x) => x.moneda === deuda.moneda) ?? b[0])?.id ?? null);
+    })().catch((e) => setError(String(e)));
+  }, [db, visible, deuda]);
 
   const meDeben = deuda.tipo === 'ME_DEBEN';
+  const devolviendo = guardado !== null && aGuardado;
+  // Al devolver a lo guardado: si lo guardado va en la misma moneda que la deuda, el cambio es
+  // entre la billetera de origen y lo guardado (el P2P); si no (Bs. llevados en dólares), el
+  // dinero sale en la moneda de lo guardado y el cambio es contra la deuda.
+  const guardadoIgualDeuda = guardado !== null && equivalentes(guardado.moneda, deuda.unidad);
+  const billeteras = devolviendo && !guardadoIgualDeuda ? todas.filter((b) => b.moneda === guardado.moneda) : todas;
   const billetera = billeteras.find((b) => b.id === billeteraId) ?? null;
   const de = billetera?.moneda ?? deuda.unidad;
-  const a = deuda.unidad;
+  const a = devolviendo && guardadoIgualDeuda ? guardado.moneda : deuda.unidad;
   // USD y USDT se toman 1:1; con bolívares de por medio hace falta una tasa.
   const conCambio = billetera !== null && de !== a;
   const tasaPorDefecto = conCambio && equivalentes(de, a) ? 1 : null;
@@ -124,13 +144,32 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
     setGuardando(true);
     setError(null);
     try {
-      await registrarPagoDeuda(db, {
-        deuda_id: deuda.id,
-        billetera_id: billetera.id,
-        monto,
-        monto_unidad: conCambio ? equivalente : null,
-        fecha: new Date().toISOString(),
-      });
+      const fecha = new Date().toISOString();
+      if (devolviendo && guardadoIgualDeuda) {
+        await devolverAAjeno(db, {
+          deuda_id: deuda.id,
+          monto: conCambio ? equivalente! : monto,
+          desde_billetera_id: billetera.id,
+          monto_origen: monto,
+          fecha,
+        });
+      } else if (devolviendo) {
+        await devolverAAjeno(db, {
+          deuda_id: deuda.id,
+          monto,
+          monto_unidad: conCambio ? equivalente : null,
+          desde_billetera_id: billetera.id,
+          fecha,
+        });
+      } else {
+        await registrarPagoDeuda(db, {
+          deuda_id: deuda.id,
+          billetera_id: billetera.id,
+          monto,
+          monto_unidad: conCambio ? equivalente : null,
+          fecha,
+        });
+      }
       onCerrar(true);
     } catch (e) {
       setError(e instanceof ErrorValidacion ? e.message : String(e));
@@ -142,10 +181,54 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
   return (
     <Portal>
       <Dialog visible={visible} onDismiss={() => onCerrar(false)} style={{ marginBottom: alturaTeclado }}>
-        <Dialog.Title>{meDeben ? `Cobro a ${deuda.persona}` : `Pago a ${deuda.persona}`}</Dialog.Title>
+        <Dialog.Title>
+          {deuda.ajeno ? `Entregar a ${deuda.persona}` : guardado ? `Devolver a ${deuda.persona}` : meDeben ? `Cobro a ${deuda.persona}` : `Pago a ${deuda.persona}`}
+        </Dialog.Title>
         <Dialog.ScrollArea style={[styles.area, { maxHeight: Math.max(altoPantalla - alturaTeclado - 260, 160) }]}>
           <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
-            <Text variant="bodyMedium">{`Pendiente: ${formatearMonto(deuda.pendiente, deuda.unidad)}`}</Text>
+            <Text variant="bodyMedium">
+              {`${deuda.ajeno ? 'Le guardas' : 'Pendiente'}: ${formatearMonto(deuda.pendiente, deuda.unidad)}`}
+            </Text>
+            {deuda.ajeno && (
+              <Text variant="bodySmall">Lo que le das o gastas por esa persona sale de tu billetera y deja de guardarse.</Text>
+            )}
+            {guardado && (
+              <>
+                <Text variant="labelLarge">¿A dónde va?</Text>
+                <View style={styles.chips}>
+                  <Chip
+                    compact
+                    selected={aGuardado}
+                    showSelectedCheck={false}
+                    mode={aGuardado ? 'flat' : 'outlined'}
+                    onPress={() => {
+                      setAGuardado(true);
+                      setBilleteraId(guardado.billetera_id);
+                      setTasaTexto('');
+                      setEquivalenteTexto('');
+                    }}
+                  >
+                    {`A lo que le guardo en ${guardado.billetera_nombre}`}
+                  </Chip>
+                  <Chip
+                    compact
+                    selected={!aGuardado}
+                    showSelectedCheck={false}
+                    mode={!aGuardado ? 'flat' : 'outlined'}
+                    onPress={() => setAGuardado(false)}
+                  >
+                    Se lo entrego
+                  </Chip>
+                </View>
+                {aGuardado && (
+                  <Text variant="bodySmall">
+                    {guardadoIgualDeuda
+                      ? `Si ya lo tienes en ${guardado.billetera_nombre}, déjala elegida. Si lo compraste con otra cuenta (P2P), elige esa y escribe la tasa o lo que pagaste: se registra la transferencia.`
+                      : `Vuelve a ser suyo en ${guardado.billetera_nombre}; escribe a cuánto está el dólar para saber cuánto descuenta.`}
+                  </Text>
+                )}
+              </>
+            )}
             <Text variant="labelLarge">{meDeben ? 'Entra a' : 'Sale de'}</Text>
             <SelectorBilletera
               billeteras={billeteras}
@@ -174,7 +257,7 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
 
             <View style={styles.fila}>
               <TextInput
-                label={meDeben ? 'Monto recibido' : 'Monto pagado'}
+                label={meDeben ? 'Monto recibido' : devolviendo && conCambio && guardadoIgualDeuda ? 'Pagaste' : 'Monto pagado'}
                 value={montoTexto}
                 onChangeText={cambiarMonto}
                 keyboardType="decimal-pad"
@@ -184,7 +267,7 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
               />
               {conCambio && (
                 <TextInput
-                  label="Descuenta"
+                  label={devolviendo && guardadoIgualDeuda ? 'Llega' : 'Descuenta'}
                   value={equivalenteTexto}
                   placeholder={equivalente ? centimosATexto(equivalente) : undefined}
                   onChangeText={cambiarEquivalente}
@@ -223,4 +306,5 @@ const styles = StyleSheet.create({
   contenido: { paddingHorizontal: 24, paddingVertical: 12, gap: 12 },
   fila: { flexDirection: 'row', gap: 8 },
   chipTodo: { alignSelf: 'flex-start' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

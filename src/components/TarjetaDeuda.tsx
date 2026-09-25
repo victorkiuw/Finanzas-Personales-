@@ -48,7 +48,28 @@ export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: P
   const otra = PARES.find((p) => p !== referencia)!;
   const pendienteOtra = alDia ? bolivaresHoy(d.pendiente, d, tasas, otra) : null;
 
-  const prestamo = meDeben
+  const fechaCorta = formatearFechaCorta(new Date(d.fecha));
+  if (d.ajeno) {
+    return (
+      <View style={styles.resumen}>
+        <Text variant="bodyMedium">
+          {`Es dinero de ${d.persona} que tienes${d.billetera_nombre ? ` en ${d.billetera_nombre}` : ''} desde el ${fechaCorta}. No cuenta como tuyo.`}
+        </Text>
+        <Text variant="labelLarge" style={[suave, styles.titulo]}>
+          {d.cerrada || d.pendiente === 0 ? 'Ya se lo entregaste todo.' : 'Hoy le guardas:'}
+        </Text>
+        {d.pendiente > 0 && !d.cerrada && (
+          <Text variant="headlineSmall" style={styles.cifra}>
+            {formatearMonto(d.pendiente, d.unidad)}
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  const prestamo = d.origen_ajeno_id
+    ? `Tomaste ${formatearMonto(d.monto, d.moneda)} de lo que le guardas a ${d.persona} el ${fechaCorta}`
+    : meDeben
     ? `Le prestaste ${formatearMonto(d.monto, d.moneda)} a ${d.persona} el ${formatearFechaCorta(new Date(d.fecha))}`
     : `${d.persona} te prestó ${formatearMonto(d.monto, d.moneda)} el ${formatearFechaCorta(new Date(d.fecha))}`;
 

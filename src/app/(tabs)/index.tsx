@@ -17,6 +17,7 @@ import { TarjetaPendientes } from '../../components/TarjetaPendientes';
 import { useTasas } from '../../components/TasasProvider';
 import { listarBilleteras, type Billetera } from '../../db/billeteras';
 import { listarCategorias, type Categoria } from '../../db/categorias';
+import { ajenoPorBilletera, listarDeudas, type Deuda } from '../../db/deudas';
 import { listarMetas, type Meta } from '../../db/metas';
 import { listarPlantillas, type Plantilla } from '../../db/plantillas';
 import { estadoPresupuestos, listarPresupuestos, type Presupuesto } from '../../db/presupuestos';
@@ -58,6 +59,8 @@ function claveMes(d: Date): string {
 
 interface Datos {
   billeteras: Billetera[];
+  /** Deudas abiertas: de aquí sale el dinero de otros guardado en cada billetera. */
+  deudas: Deuda[];
   metas: Meta[];
   recientes: Movimiento[];
   filas: FilaReporte[];
@@ -119,16 +122,18 @@ export default function PantallaInicio() {
     const conversor = new Conversor(historial, cambio.dolar, historialEuro, cambio.euro);
     const puntos = await disponibleAl(db, cortes.map((p) => p.hasta), conversor, monedaBase);
     const patrimonio = puntos.map((p, i) => ({ ...p, mes: cortes[i].larga }));
-    const [sinExportar, plantillas, devaluacion] = await Promise.all([
+    const [sinExportar, plantillas, devaluacion, deudas] = await Promise.all([
       diasSinExportar(db),
       listarPlantillas(db),
       // Lo que perdieron los bolívares en el mes que se está viendo (hasta hoy si es el actual).
       perdidaPorDevaluacion(db, historial, mes, new Date(Math.min(Date.now(), new Date(mes.getFullYear(), mes.getMonth() + 1, 1).getTime()))),
+      listarDeudas(db, { incluirCerradas: false }),
     ]);
     // Mantiene al día el widget de la pantalla de inicio (si el usuario lo agregó).
     actualizarWidget(db).catch(() => {});
     setDatos({
       billeteras,
+      deudas,
       metas,
       recientes,
       filas,
@@ -170,6 +175,8 @@ export default function PantallaInicio() {
 
   if (!datos || !reporte) return <ActivityIndicator style={styles.cargando} />;
 
+  const ajenoPor = ajenoPorBilletera(datos.deudas);
+
   if (datos.billeteras.length === 0) {
     return (
       <View style={styles.bienvenida}>
@@ -209,12 +216,13 @@ export default function PantallaInicio() {
             />
           </Card>
         )}
-        <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} />
+        <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} deudas={datos.deudas} />
 
         {/* Billeteras en cuadrícula de dos columnas: se ven todas sin deslizar. */}
         <View style={styles.carrusel}>
           {datos.billeteras.map((b) => {
             const oculta = !b.en_total && !visibles.has(b.id);
+            const deOtros = ajenoPor.get(b.id);
             return (
               <Pressable
                 key={b.id}
@@ -253,6 +261,11 @@ export default function PantallaInicio() {
                 >
                   {oculta ? '••••••' : formatearMonto(b.saldo, b.moneda)}
                 </Text>
+                {deOtros && !oculta ? (
+                  <Text variant="bodySmall" numberOfLines={1} style={{ color: tema.colors.onSurfaceVariant }}>
+                    {`de otros: ${formatearMonto(deOtros, b.moneda)}`}
+                  </Text>
+                ) : null}
               </Pressable>
             );
           })}
@@ -375,7 +388,7 @@ export default function PantallaInicio() {
           <Card mode="outlined">
             <Card.Title
               title="Evolución de lo disponible"
-              subtitle={`${TEXTO_LINEA[escala]}, sin metas ni billeteras aparte`}
+              subtitle={`${TEXTO_LINEA[escala]}, sin metas, billeteras aparte ni dinero de otros`}
               subtitleNumberOfLines={2}
             />
             <Card.Content>

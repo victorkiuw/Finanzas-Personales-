@@ -15,6 +15,7 @@ const TABLAS = [
   'presupuestos',
   'metas_ahorro',
   'deudas',
+  'ajustes_deuda',
   'compras_cuotas',
   'transacciones',
   'recurrentes',

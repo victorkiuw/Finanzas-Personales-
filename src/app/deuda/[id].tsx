@@ -5,14 +5,23 @@ import { Alert, Linking, StyleSheet, View } from 'react-native';
 import { Button, Card, Text, useTheme } from 'react-native-paper';
 
 import { DialogoPagoDeuda } from '../../components/DialogoPagoDeuda';
+import { DialogoTomarPrestado } from '../../components/DialogoTomarPrestado';
 import { ListaMovimientos } from '../../components/ListaMovimientos';
 import { ResumenDeuda, vencida } from '../../components/TarjetaDeuda';
 import { useTasas } from '../../components/TasasProvider';
-import { eliminarDeuda, establecerDeudaCerrada, obtenerDeuda, type Deuda } from '../../db/deudas';
+import {
+  eliminarDeuda,
+  establecerDeudaCerrada,
+  listarAjustes,
+  listarDeudas,
+  obtenerDeuda,
+  type AjusteDeuda,
+  type Deuda,
+} from '../../db/deudas';
 import { cambioDe } from '../../db/tasas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
 import { convertir } from '../../lib/conversion';
-import { fechaSimpleLegible } from '../../lib/fechas';
+import { fechaSimpleLegible, formatearFechaCorta } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
 
 export default function DetalleDeuda() {
@@ -23,12 +32,24 @@ export default function DetalleDeuda() {
   const { tasas, referencia } = useTasas();
   const [deuda, setDeuda] = useState<Deuda | null>(null);
   const [pagando, setPagando] = useState(false);
+  const [tomando, setTomando] = useState(false);
+  const [ajustes, setAjustes] = useState<AjusteDeuda[]>([]);
+  // Si es dinero ajeno, lo que se ha tomado prestado de él y sigue pendiente.
+  const [tomadas, setTomadas] = useState<Deuda[]>([]);
   // Fuerza a la lista a recargar tras un pago (la pantalla no pierde el foco).
   const [version, setVersion] = useState(0);
 
   const cargar = useCallback(() => {
-    obtenerDeuda(db, deudaId)
-      .then((d) => (d ? setDeuda(d) : router.back()))
+    Promise.all([obtenerDeuda(db, deudaId), listarAjustes(db, deudaId), listarDeudas(db, { incluirCerradas: false })])
+      .then(([d, a, todas]) => {
+        if (!d) {
+          router.back();
+          return;
+        }
+        setDeuda(d);
+        setAjustes(a);
+        setTomadas(todas.filter((x) => x.origen_ajeno_id === d.id));
+      })
       .catch((e) => Alert.alert('Error', String(e)));
   }, [db, deudaId]);
 
@@ -43,7 +64,9 @@ export default function DetalleDeuda() {
   const confirmarEliminar = () => {
     Alert.alert(
       '¿Eliminar deuda?',
-      'Se borrarán también el préstamo y los pagos registrados, y los saldos de tus billeteras se recalcularán.',
+      deuda?.ajeno
+        ? 'Se borrará lo que le guardas y lo que le hayas entregado; lo que tomaste prestado queda como una deuda normal.'
+        : 'Se borrarán también el préstamo y los pagos registrados, y los saldos de tus billeteras se recalcularán.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -77,13 +100,23 @@ export default function DetalleDeuda() {
     <>
       <Stack.Screen
         options={{
-          title: deuda ? (meDeben ? `${deuda.persona} me debe` : `Le debo a ${deuda.persona}`) : '',
+          title: deuda
+            ? deuda.ajeno
+              ? `Dinero de ${deuda.persona}`
+              : meDeben
+                ? `${deuda.persona} me debe`
+                : `Le debo a ${deuda.persona}`
+            : '',
         }}
       />
       <ListaMovimientos
         key={version}
         filtro={{ deudaId }}
-        textoVacio="Sin movimientos: esta deuda se registró sin mover saldos."
+        textoVacio={
+          deuda?.ajeno || deuda?.origen_ajeno_id
+            ? 'Sin movimientos en tus billeteras.'
+            : 'Sin movimientos: esta deuda se registró sin mover saldos.'
+        }
         encabezado={
           deuda ? (
             <View>
@@ -98,8 +131,23 @@ export default function DetalleDeuda() {
                   {deuda.nota && <Text variant="bodyMedium">{deuda.nota}</Text>}
                   {deuda.cerrada && (
                     <Text variant="labelLarge" style={{ color: tema.colors.primary }}>
-                      ✓ Saldada
+                      {deuda.ajeno ? '✓ Entregado' : '✓ Saldada'}
                     </Text>
+                  )}
+                  {tomadas.map((t) => (
+                    <Button key={t.id} mode="text" icon="hand-coin" style={styles.izquierda} onPress={() => router.push(`/deuda/${t.id}`)}>
+                      {`Le debes ${formatearMonto(t.pendiente, t.unidad)} que tomaste de aquí`}
+                    </Button>
+                  ))}
+                  {ajustes.length > 0 && (
+                    <View style={styles.historial}>
+                      <Text variant="labelLarge">Sin mover saldos</Text>
+                      {ajustes.map((a) => (
+                        <Text key={a.id} variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                          {`${formatearFechaCorta(new Date(a.fecha))} · ${a.nota ?? ''}: ${a.monto > 0 ? '−' : '+'}${formatearMonto(Math.abs(a.monto), deuda.unidad)}`}
+                        </Text>
+                      ))}
+                    </View>
                   )}
                   {meDeben && !deuda.cerrada && deuda.pendiente > 0 && (
                     <Button mode="outlined" icon="whatsapp" onPress={recordarPorWhatsApp} style={styles.izquierda}>
@@ -111,18 +159,25 @@ export default function DetalleDeuda() {
                     <Button compact mode="contained-tonal" icon="pencil" onPress={() => router.push(`/deuda/editar/${deudaId}`)}>
                       Editar
                     </Button>
-                    <Button compact mode="outlined" icon={deuda.cerrada ? 'lock-open-variant' : 'check-circle'} onPress={alternarCerrada}>
-                      {deuda.cerrada ? 'Reabrir' : 'Saldada'}
-                    </Button>
+                    {!deuda.ajeno && (
+                      <Button compact mode="outlined" icon={deuda.cerrada ? 'lock-open-variant' : 'check-circle'} onPress={alternarCerrada}>
+                        {deuda.cerrada ? 'Reabrir' : 'Saldada'}
+                      </Button>
+                    )}
                     <Button compact mode="text" icon="delete" textColor={tema.colors.error} onPress={confirmarEliminar}>
                       Eliminar
                     </Button>
                   </View>
                 </Card.Content>
               </Card>
-              {!deuda.cerrada && (
+              {deuda.ajeno && deuda.pendiente > 0 && (
+                <Button mode="contained-tonal" icon="hand-coin" style={styles.boton} onPress={() => setTomando(true)}>
+                  Tomar prestado de aquí
+                </Button>
+              )}
+              {!deuda.cerrada && deuda.pendiente > 0 && (
                 <Button mode="contained" icon="cash-plus" style={styles.boton} onPress={() => setPagando(true)}>
-                  {meDeben ? 'Registrar cobro' : 'Registrar pago'}
+                  {deuda.ajeno ? `Entregar o gastar lo de ${deuda.persona}` : deuda.origen_ajeno_id ? 'Devolver' : meDeben ? 'Registrar cobro' : 'Registrar pago'}
                 </Button>
               )}
             </View>
@@ -142,6 +197,16 @@ export default function DetalleDeuda() {
           }}
         />
       )}
+      {deuda?.ajeno && (
+        <DialogoTomarPrestado
+          ajeno={deuda}
+          visible={tomando}
+          onCerrar={(nueva) => {
+            setTomando(false);
+            if (nueva) cargar();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -152,4 +217,5 @@ const styles = StyleSheet.create({
   izquierda: { alignSelf: 'flex-start' },
   acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   boton: { marginHorizontal: 16, marginBottom: 8 },
+  historial: { gap: 2 },
 });

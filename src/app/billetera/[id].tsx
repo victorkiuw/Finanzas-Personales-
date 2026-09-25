@@ -6,6 +6,7 @@ import { Avatar, Button, Card, IconButton, Text, useTheme } from 'react-native-p
 
 import { ListaMovimientos } from '../../components/ListaMovimientos';
 import { obtenerBilletera, type Billetera } from '../../db/billeteras';
+import { listarDeudas, type Deuda } from '../../db/deudas';
 import { formatearMonto, INFO_MONEDA } from '../../lib/moneda';
 
 export default function DetalleBilletera() {
@@ -14,6 +15,8 @@ export default function DetalleBilletera() {
   const db = useSQLiteContext();
   const tema = useTheme();
   const [billetera, setBilletera] = useState<Billetera | null>(null);
+  // Dinero de otras personas guardado en esta billetera.
+  const [ajenas, setAjenas] = useState<Deuda[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -23,6 +26,9 @@ export default function DetalleBilletera() {
           else router.back();
         })
         .catch((e) => Alert.alert('Error', String(e)));
+      listarDeudas(db, { incluirCerradas: false })
+        .then((d) => setAjenas(d.filter((x) => x.ajeno && x.billetera_id === billeteraId && x.pendiente > 0)))
+        .catch(() => {});
     }, [db, billeteraId]),
   );
 
@@ -49,8 +55,28 @@ export default function DetalleBilletera() {
             >
               {formatearMonto(billetera.saldo, billetera.moneda)}
             </Text>
+            {ajenas.length > 0 && (
+              <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
+                {`Tuyo: ${formatearMonto(billetera.saldo - ajenas.reduce((s, d) => s + d.pendiente, 0), billetera.moneda)}`}
+              </Text>
+            )}
           </View>
         </Card.Content>
+        {ajenas.map((d) => (
+          <Button key={d.id} mode="text" icon="account-cash" style={styles.izquierda} onPress={() => router.push(`/deuda/${d.id}`)}>
+            {`De ${d.persona}: ${formatearMonto(d.pendiente, d.unidad)}`}
+          </Button>
+        ))}
+        {!billetera.archivada && (
+          <Button
+            mode="text"
+            icon="account-plus"
+            style={styles.izquierda}
+            onPress={() => router.push(`/deuda/nueva?ajeno=1&billetera=${billeteraId}`)}
+          >
+            Parte de este dinero es de otra persona
+          </Button>
+        )}
       </Card>
       {!billetera.archivada && (
         <View style={styles.acciones}>
@@ -103,4 +129,5 @@ const styles = StyleSheet.create({
   resumen: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   saldo: { fontVariant: ['tabular-nums'], fontWeight: '600' },
   acciones: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
+  izquierda: { alignSelf: 'flex-start', marginLeft: 8 },
 });

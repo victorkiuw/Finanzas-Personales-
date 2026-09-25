@@ -381,6 +381,23 @@ const MIGRACIONES: (string | Migracion)[] = [
   ALTER TABLE recurrentes_v10 RENAME TO recurrentes;
   `,
   },
+  // v11: dinero de otros guardado en mis billeteras (deudas "ajenas") y ajustes
+  // de deuda que no mueven saldos (tomar prestado de ese dinero y devolverlo).
+  `
+  ALTER TABLE deudas ADD COLUMN ajeno INTEGER NOT NULL DEFAULT 0 CHECK (ajeno IN (0, 1));
+  ALTER TABLE deudas ADD COLUMN billetera_id INTEGER REFERENCES billeteras(id) ON DELETE SET NULL;
+  ALTER TABLE deudas ADD COLUMN origen_ajeno_id INTEGER REFERENCES deudas(id) ON DELETE SET NULL;
+  CREATE TABLE ajustes_deuda (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deuda_id INTEGER NOT NULL REFERENCES deudas(id) ON DELETE CASCADE,
+    monto INTEGER NOT NULL CHECK (monto <> 0),
+    fecha TEXT NOT NULL,
+    grupo TEXT NOT NULL,
+    nota TEXT
+  );
+  CREATE INDEX idx_ajustes_deuda ON ajustes_deuda(deuda_id);
+  CREATE INDEX idx_ajustes_grupo ON ajustes_deuda(grupo);
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;
