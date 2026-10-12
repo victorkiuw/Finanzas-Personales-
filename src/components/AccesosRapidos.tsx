@@ -12,7 +12,7 @@ export interface Acceso {
 /** Fila de botones redondos con su nombre debajo (como los accesos de Rial). */
 export function AccesosRapidos({ accesos }: { accesos: Acceso[] }) {
   const tema = useTheme();
-  const extra = coloresExtra(tema.dark);
+  const extra = coloresExtra(tema);
   return (
     <View style={styles.fila}>
       {accesos.map((a) => (

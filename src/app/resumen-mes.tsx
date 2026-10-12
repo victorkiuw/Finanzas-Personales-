@@ -14,7 +14,6 @@ import { filasDeReporte, resumirPeriodo, type FilaReporte } from '../db/reportes
 import { variacion } from '../lib/analisis';
 import { nombreMes, rangoMes } from '../lib/fechas';
 import { formatearMonto } from '../lib/moneda';
-import { LIMA } from '../lib/tema';
 
 /** Resumen del mes como una tarjeta bonita, para guardarla o compartirla por WhatsApp. */
 export default function ResumenDelMes() {
@@ -73,7 +72,7 @@ export default function ResumenDelMes() {
       <SelectorMes mes={mes} onCambio={setMes} />
 
       <View ref={tarjeta} collapsable={false} style={[styles.tarjeta, { backgroundColor: c.fondo }]}>
-        <Text style={[styles.marca, { color: LIMA }]}>Finanzas</Text>
+        <Text style={[styles.marca, { color: tema.colors.primaryContainer }]}>Finanzas</Text>
         <Text style={[styles.titulo, { color: c.texto }]}>{`Mi resumen de ${nombreMes(mes)}`}</Text>
         {resumen && (
           <>

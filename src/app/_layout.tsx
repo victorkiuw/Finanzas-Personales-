@@ -1,20 +1,18 @@
 import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useRef } from 'react';
-import { useColorScheme } from 'react-native';
-import { PaperProvider } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
 
 import { Candado } from '../components/Candado';
 import { ConfirmacionListoProvider } from '../components/ConfirmacionListo';
 import { ModoDiscretoProvider } from '../components/ModoDiscreto';
 import { TasasProvider } from '../components/TasasProvider';
+import { TemaApp } from '../components/TemaApp';
 import { migrar, NOMBRE_BD } from '../db/esquema';
 import { actualizarAvisosRecurrentes, actualizarAvisosVencimientos, enviarResumenMensual } from '../lib/avisos';
 import { configurarNotificaciones } from '../lib/notificaciones';
 import { hacerCopiaAutomatica } from '../lib/respaldoAuto';
-import { temaClaro, temaOscuro } from '../lib/tema';
 
 /** Al tocar un aviso que trae una pantalla (deuda que vence, cuota…), se abre esa pantalla. */
 function AbrirDesdeAviso() {
@@ -48,38 +46,43 @@ function Arranque() {
   return null;
 }
 
-export default function RootLayout() {
-  const tema = useColorScheme() === 'dark' ? temaOscuro : temaClaro;
+/** Navegación con los colores del tema elegido. */
+function Navegacion() {
+  const tema = useTheme();
+  return (
+    <ConfirmacionListoProvider>
+      <Candado>
+        <ModoDiscretoProvider>
+          {(discreto) => (
+            <Stack
+              // Al cambiar el modo discreto se vuelve a dibujar todo con los montos ocultos o visibles.
+              key={discreto ? 'discreto' : 'normal'}
+              screenOptions={{
+                headerStyle: { backgroundColor: tema.colors.background },
+                headerTintColor: tema.colors.onSurface,
+                headerTitleStyle: { fontWeight: '700' },
+                headerShadowVisible: false,
+                contentStyle: { backgroundColor: tema.colors.background },
+              }}
+            >
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            </Stack>
+          )}
+        </ModoDiscretoProvider>
+      </Candado>
+    </ConfirmacionListoProvider>
+  );
+}
 
+export default function RootLayout() {
   return (
     <SQLiteProvider databaseName={NOMBRE_BD} onInit={migrar}>
       <Arranque />
       <AbrirDesdeAviso />
       <TasasProvider>
-        <PaperProvider theme={tema}>
-          <StatusBar style={tema.dark ? 'light' : 'dark'} />
-          <ConfirmacionListoProvider>
-          <Candado>
-            <ModoDiscretoProvider>
-              {(discreto) => (
-                <Stack
-                  // Al cambiar el modo discreto se vuelve a dibujar todo con los montos ocultos o visibles.
-                  key={discreto ? 'discreto' : 'normal'}
-                  screenOptions={{
-                    headerStyle: { backgroundColor: tema.colors.background },
-                    headerTintColor: tema.colors.onSurface,
-                    headerTitleStyle: { fontWeight: '700' },
-                    headerShadowVisible: false,
-                    contentStyle: { backgroundColor: tema.colors.background },
-                  }}
-                >
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                </Stack>
-              )}
-            </ModoDiscretoProvider>
-          </Candado>
-          </ConfirmacionListoProvider>
-        </PaperProvider>
+        <TemaApp>
+          <Navegacion />
+        </TemaApp>
       </TasasProvider>
     </SQLiteProvider>
   );

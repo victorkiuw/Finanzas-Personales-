@@ -1,4 +1,5 @@
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import * as Crypto from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { router, Stack } from 'expo-router';
@@ -9,10 +10,12 @@ import { ActivityIndicator, Divider, List, Switch, Text, useTheme } from 'react-
 
 import { abrirAjustesNotificaciones, lectorDisponible, tienePermiso } from '../../modules/lector-notificaciones';
 import { autenticar, CLAVE_BLOQUEO, puedeBloquear } from '../components/Candado';
+import { DialogoContrasena } from '../components/DialogoContrasena';
 import { CLAVE_GUIA } from '../components/GuiaBienvenida';
 import { useTasas } from '../components/TasasProvider';
 import { exportarMovimientosCsv } from '../db/exportar';
-import { exportarDatos, importarDatos, resumenRespaldo, validarRespaldo, type Respaldo } from '../db/respaldo';
+import { APP_RESPALDO, exportarDatos, importarDatos, resumenRespaldo, validarRespaldo, type Respaldo } from '../db/respaldo';
+import { cifrarTexto, descifrarTexto, ErrorContrasena, esCopiaCifrada, type Cifrado } from '../lib/cifrado';
 import { guardarPreferencia, leerPreferencia } from '../db/preferencias';
 import { claveDia } from '../lib/fechas';
 import { cancelarRecordatorioDiario, pedirPermiso, programarRecordatorioDiario } from '../lib/notificaciones';
@@ -29,6 +32,10 @@ export default function PantallaAjustes() {
   const [recordatorio, setRecordatorio] = useState<string | null>(null);
   const [bloqueo, setBloqueo] = useState(false);
   const [leeAvisos, setLeeAvisos] = useState(() => tienePermiso());
+  // Diálogos de contraseña: al exportar (opcional) y al abrir una copia cifrada.
+  const [pedirClaveExportar, setPedirClaveExportar] = useState(false);
+  const [copiaCifrada, setCopiaCifrada] = useState<Cifrado | null>(null);
+  const [errorClave, setErrorClave] = useState<string | null>(null);
 
   // Al volver de los ajustes de Android se revisa si dio el permiso.
   useEffect(() => {
@@ -73,13 +80,21 @@ export default function PantallaAjustes() {
     setRecordatorio(null);
   };
 
-  const exportar = async () => {
-    setTrabajando('Preparando la copia…');
+  /** Exporta la copia; con contraseña, los datos van cifrados. */
+  const exportar = async (contrasena: string | null) => {
+    setPedirClaveExportar(false);
+    setTrabajando(contrasena ? 'Cifrando la copia…' : 'Preparando la copia…');
+    // Un instante para que se vea el aviso antes del cálculo (cifrar toma unos segundos).
+    await new Promise((r) => setTimeout(r, 50));
     try {
       const respaldo = await exportarDatos(db);
+      const json = JSON.stringify(respaldo);
+      const contenido = contrasena
+        ? JSON.stringify({ app: APP_RESPALDO, cifrado: cifrarTexto(json, contrasena, (n) => Crypto.getRandomBytes(n)) })
+        : json;
       await compartirArchivo(
-        `finanzas-respaldo-${claveDia(respaldo.exportado_en)}.json`,
-        JSON.stringify(respaldo),
+        `finanzas-respaldo-${claveDia(respaldo.exportado_en)}${contrasena ? '-protegida' : ''}.json`,
+        contenido,
         'application/json',
         'Guardar copia de seguridad',
       );
@@ -132,26 +147,58 @@ export default function PantallaAjustes() {
     }
   };
 
+  const confirmarRestaurar = (respaldo: Respaldo) =>
+    Alert.alert(
+      '¿Reemplazar todos tus datos?',
+      `La copia del ${claveDia(respaldo.exportado_en)} tiene ${resumenRespaldo(respaldo)}. Todo lo que hay ahora en la app se borrará y se usará la copia.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Reemplazar', style: 'destructive', onPress: () => restaurar(respaldo) },
+      ],
+    );
+
+  const avisarError = (e: unknown) => {
+    const mensaje = e instanceof SyntaxError ? 'El archivo no es un JSON válido.' : e instanceof Error ? e.message : String(e);
+    Alert.alert('No se pudo leer la copia', mensaje);
+  };
+
   const importar = async () => {
     try {
       const r = await DocumentPicker.getDocumentAsync({ type: ['application/json', '*/*'], copyToCacheDirectory: true });
       if (r.canceled) return;
       setTrabajando('Leyendo la copia…');
       const texto = await new File(r.assets[0].uri).text();
-      const respaldo = validarRespaldo(JSON.parse(texto));
+      const json: unknown = JSON.parse(texto);
       setTrabajando(null);
-      Alert.alert(
-        '¿Reemplazar todos tus datos?',
-        `La copia del ${claveDia(respaldo.exportado_en)} tiene ${resumenRespaldo(respaldo)}. Todo lo que hay ahora en la app se borrará y se usará la copia.`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Reemplazar', style: 'destructive', onPress: () => restaurar(respaldo) },
-        ],
-      );
+      if (esCopiaCifrada(json)) {
+        setErrorClave(null);
+        setCopiaCifrada(json.cifrado);
+        return;
+      }
+      confirmarRestaurar(validarRespaldo(json));
     } catch (e) {
       setTrabajando(null);
-      const mensaje = e instanceof SyntaxError ? 'El archivo no es un JSON válido.' : e instanceof Error ? e.message : String(e);
-      Alert.alert('No se pudo leer la copia', mensaje);
+      avisarError(e);
+    }
+  };
+
+  const abrirCifrada = async (contrasena: string | null) => {
+    const copia = copiaCifrada;
+    if (!copia || !contrasena) return;
+    setCopiaCifrada(null);
+    setTrabajando('Descifrando la copia…');
+    await new Promise((r) => setTimeout(r, 50));
+    try {
+      const respaldo = validarRespaldo(JSON.parse(descifrarTexto(copia, contrasena)));
+      setTrabajando(null);
+      confirmarRestaurar(respaldo);
+    } catch (e) {
+      setTrabajando(null);
+      if (e instanceof ErrorContrasena) {
+        // Se vuelve a pedir, con el aviso.
+        setErrorClave('Contraseña incorrecta. Intenta de nuevo.');
+        setCopiaCifrada(copia);
+      } else avisarError(e);
     }
   };
 
@@ -179,6 +226,13 @@ export default function PantallaAjustes() {
           />
         ))}
         <List.Subheader>Personalizar</List.Subheader>
+        <List.Item
+          title="Apariencia"
+          description="Tema claro u oscuro y color de acento"
+          left={(p) => <List.Icon {...p} icon="palette-outline" />}
+          right={(p) => <List.Icon {...p} icon="chevron-right" />}
+          onPress={() => router.push('/apariencia')}
+        />
         <List.Item
           title="Personalizar Inicio"
           description="Ordenar u ocultar las secciones de la pantalla principal"
@@ -273,9 +327,9 @@ export default function PantallaAjustes() {
         <List.Subheader>Copia de seguridad y exportar</List.Subheader>
         <List.Item
           title="Exportar copia"
-          description="Guarda todos tus datos en un archivo (Drive, WhatsApp, Archivos…)"
+          description="Guarda todos tus datos en un archivo (Drive, WhatsApp, Archivos…), con contraseña si quieres"
           left={(p) => <List.Icon {...p} icon="cloud-upload" />}
-          onPress={exportar}
+          onPress={() => setPedirClaveExportar(true)}
           disabled={trabajando !== null}
         />
         <List.Item
@@ -309,6 +363,23 @@ export default function PantallaAjustes() {
           fuera del teléfono.
         </Text>
       </List.Section>
+      <DialogoContrasena
+        visible={pedirClaveExportar}
+        titulo="¿Proteger con contraseña?"
+        mensaje="La copia irá cifrada: sin la contraseña nadie podrá ver tus datos aunque tenga el archivo."
+        repetir
+        opcional
+        onListo={exportar}
+        onCerrar={() => setPedirClaveExportar(false)}
+      />
+      <DialogoContrasena
+        visible={copiaCifrada !== null}
+        titulo="Copia protegida"
+        mensaje="Escribe la contraseña con la que guardaste esta copia."
+        error={errorClave}
+        onListo={abrirCifrada}
+        onCerrar={() => setCopiaCifrada(null)}
+      />
     </ScrollView>
   );
 }

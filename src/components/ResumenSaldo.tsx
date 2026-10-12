@@ -61,7 +61,7 @@ export function ResumenSaldo({
   anterior?: number | null;
 }) {
   const tema = useTheme();
-  const extra = coloresExtra(tema.dark);
+  const extra = coloresExtra(tema);
   const { cambio, referencia, monedaBase, vista, cambiarVista, tasas } = useTasas();
   const { discreto, alternar } = useModoDiscreto();
   const [verAparte, setVerAparte] = useState(false);

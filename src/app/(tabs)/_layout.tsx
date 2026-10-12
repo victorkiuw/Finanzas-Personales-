@@ -16,7 +16,7 @@ const icono =
 
 export default function TabsLayout() {
   const tema = useTheme();
-  const extra = coloresExtra(tema.dark);
+  const extra = coloresExtra(tema);
 
   return (
     <Tabs
