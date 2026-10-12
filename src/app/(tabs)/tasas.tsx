@@ -47,6 +47,7 @@ type Historial = { dia: string; tasa: number }[];
 
 /** Qué tasa se usó para pasar de una moneda a otra en la calculadora. */
 function etiquetaTasa(de: Moneda, a: Moneda): string {
+  if ((de === 'USD' && a === 'USDT') || (de === 'USDT' && a === 'USD')) return 'BCV → Bs. → USDT, cada uno a su tasa';
   const otra = de === 'BS' ? a : a === 'BS' ? de : null;
   if (otra === 'USD') return 'tasa BCV';
   if (otra === 'USDT') return 'tasa USDT';
@@ -83,9 +84,7 @@ export default function PantallaTasas() {
   const [tasaManual, setTasaManual] = useState('');
 
   const monto = parsearMonto(montoTexto);
-  // Dólar y USDT no se convierten entre sí (sería 1:1 y solo estorba).
-  const esDolarOUsdt = (m: Moneda) => m === 'USD' || m === 'USDT';
-  const otras = MONEDAS.filter((m) => m !== moneda && !(esDolarOUsdt(m) && esDolarOUsdt(moneda)));
+  const otras = MONEDAS.filter((m) => m !== moneda);
   const naturales: TasasNaturales = {
     bcv: tasas.BCV?.tasa ?? null,
     usdt: tasas.PARALELO?.tasa ?? null,

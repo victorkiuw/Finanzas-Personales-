@@ -16,9 +16,9 @@ export function useConversor(): Conversor | null {
 
   useEffect(() => {
     let vigente = true;
-    Promise.all([listarHistorial(db, referencia), listarHistorial(db, 'EURO'), listarHistorial(db, 'BCV')])
-      .then(([historial, euro, bcv]) => {
-        if (vigente) setConversor(new Conversor(historial, cambio.dolar, { euro, bcv }, cambio.euro));
+    Promise.all([listarHistorial(db, referencia), listarHistorial(db, 'EURO'), listarHistorial(db, 'BCV'), listarHistorial(db, 'PARALELO')])
+      .then(([historial, euro, bcv, usdt]) => {
+        if (vigente) setConversor(new Conversor(historial, cambio.dolar, { euro, bcv }, cambio.euro, usdt));
       })
       .catch(() => {});
     return () => {

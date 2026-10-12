@@ -1,9 +1,11 @@
 import { equivalentes, type Moneda } from './moneda';
 
 /*
- * Modelo de conversión: USD y USDT se consideran equivalentes (1:1). El resto
- * se convierte pasando por el bolívar, con las tasas del `Cambio` (Bs. por
- * unidad): el dólar según la referencia elegida (BCV o USDT) y el euro.
+ * Modelo de conversión: todo pasa por el bolívar con las tasas del `Cambio`
+ * (Bs. por unidad): el dólar según la referencia elegida (BCV o USDT) y el
+ * euro. Si además se conocen la BCV y la USDT, cada dólar va con la suya: el
+ * USD a tasa BCV y el USDT a tasa USDT, así $10 BCV no son 10 USDT sino
+ * 10 × BCV / USDT. Sin esas dos tasas, USD y USDT se toman 1:1.
  */
 
 export interface Cambio {
@@ -11,18 +13,28 @@ export interface Cambio {
   dolar: number | null;
   /** Bs. por euro. */
   euro: number | null;
+  /** Bs. por USD (tasa BCV), para valorar los USD aparte de los USDT. */
+  bcv?: number | null;
+  /** Bs. por USDT. */
+  usdt?: number | null;
+}
+
+/** ¿Se puede distinguir USD (BCV) de USDT con este cambio? */
+function conDosDolares(c: Cambio): boolean {
+  return !!c.bcv && !!c.usdt;
 }
 
 /** Bs. por unidad de la moneda; null si falta esa tasa. */
 export function bsPorUnidad(m: Moneda, cambio: Cambio): number | null {
   if (m === 'BS') return 1;
   if (m === 'EUR') return cambio.euro;
+  if (conDosDolares(cambio)) return m === 'USD' ? cambio.bcv! : cambio.usdt!;
   return cambio.dolar;
 }
 
 /** Convierte céntimos de una moneda a otra; null si falta una tasa necesaria. */
 export function convertir(centimos: number, de: Moneda, a: Moneda, cambio: Cambio): number | null {
-  if (equivalentes(de, a)) return centimos;
+  if (de === a || (equivalentes(de, a) && !conDosDolares(cambio))) return centimos;
   const tasaDe = bsPorUnidad(de, cambio);
   const tasaA = bsPorUnidad(a, cambio);
   if (!tasaDe || !tasaA) return null;
@@ -69,19 +81,14 @@ export function tasaNatural(m: Moneda, t: TasasNaturales): number | null {
 }
 
 /**
- * Conversión de la calculadora: cada moneda con su tasa (bolívares a USDT con la
- * tasa USDT, a dólares con la BCV, a euros con el euro BCV). USD y USDT van 1:1
- * entre sí; euros y dólares se relacionan con el euro/dólar del BCV.
+ * Conversión de la calculadora: todo pasa por el bolívar y cada moneda va con
+ * su tasa (dólares con la BCV, USDT con la tasa USDT, euros con el euro BCV).
+ * Así $10 BCV a 800 son Bs. 8.000, que a 1.000 son 8 USDT.
  */
 export function convertirNatural(centimos: number, de: Moneda, a: Moneda, t: TasasNaturales): number | null {
-  if (equivalentes(de, a)) return centimos;
-  if (de === 'BS' || a === 'BS') {
-    const tasaDe = tasaNatural(de, t);
-    const tasaA = tasaNatural(a, t);
-    if (!tasaDe || !tasaA) return null;
-    return Math.round((centimos * tasaDe) / tasaA);
-  }
-  // Euros ↔ dólares (USD o USDT): relación del BCV.
-  if (!t.euro || !t.bcv) return null;
-  return de === 'EUR' ? Math.round((centimos * t.euro) / t.bcv) : Math.round((centimos * t.bcv) / t.euro);
+  if (de === a) return centimos;
+  const tasaDe = tasaNatural(de, t);
+  const tasaA = tasaNatural(a, t);
+  if (!tasaDe || !tasaA) return null;
+  return Math.round((centimos * tasaDe) / tasaA);
 }

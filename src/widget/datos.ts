@@ -1,7 +1,7 @@
 import { listarBilleteras } from '../db/billeteras';
 import { ajenoPorBilletera, listarDeudas } from '../db/deudas';
 import { leerPreferencia } from '../db/preferencias';
-import { cambioDe, obtenerTasas } from '../db/tasas';
+import { cambioNatural, obtenerTasas } from '../db/tasas';
 import type { BaseDatos } from '../db/tipos';
 import { NOMBRE_PAR, type ParDolar } from '../lib/api-tasas';
 import { totalConsolidado } from '../lib/conversion';
@@ -33,7 +33,7 @@ export async function datosWidget(db: BaseDatos): Promise<DatosWidget> {
   const total = totalConsolidado(
     billeteras.filter((b) => b.en_total).map((b) => ({ moneda: b.moneda, saldo: b.saldo - (ajeno.get(b.id) ?? 0) })),
     moneda,
-    cambioDe(tasas, referencia),
+    cambioNatural(tasas, referencia),
   );
   const patrimonio = total !== null ? `≈ ${formatearMonto(total, moneda)}` : '—';
   return {

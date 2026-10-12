@@ -37,3 +37,16 @@ test('centimosATexto es inverso de parsearMonto', () => {
   }
   assert.equal(centimosATexto(0), '');
 });
+
+test('USD a tasa BCV y USDT a tasa USDT cuando se conocen las dos', async () => {
+  const { convertir, totalConsolidado } = await import('../src/lib/conversion');
+  const natural = { dolar: 1000, euro: null, bcv: 800, usdt: 1000 };
+  // $10 BCV = Bs. 8.000 = 8 USDT; 10 USDT = Bs. 10.000 = $12,50 BCV.
+  assert.equal(convertir(1000, 'USD', 'USDT', natural), 800);
+  assert.equal(convertir(1000, 'USDT', 'USD', natural), 1250);
+  assert.equal(convertir(1000, 'USD', 'BS', natural), 800000);
+  assert.equal(convertir(1000000, 'BS', 'USDT', natural), 1000);
+  // Sin las dos tasas, 1:1 como antes.
+  assert.equal(convertir(1000, 'USD', 'USDT', { dolar: 1000, euro: null }), 1000);
+  assert.equal(totalConsolidado([{ moneda: 'USD', saldo: 1000 }, { moneda: 'USDT', saldo: 1000 }], 'USDT', natural), 1800);
+});

@@ -74,6 +74,7 @@ interface Datos {
   filas: FilaReporte[];
   historial: { dia: string; tasa: number }[];
   historialEuro: HistorialEuro;
+  historialUsdt: { dia: string; tasa: number }[];
   presupuestos: Presupuesto[];
   categorias: Categoria[];
   pendientes: Recurrente[];
@@ -120,7 +121,7 @@ export default function PantallaInicio() {
     const { pendientes } = await procesarRecurrentes(db);
     const desde = rangoMes(mes, -(MESES_GRAFICO - 1)).desde;
     const hasta = rangoMes(mes).hasta;
-    const [billeteras, metas, recientes, filas, historial, historialEuroBcv, historialBcv, presupuestos, categorias] =
+    const [billeteras, metas, recientes, filas, historial, historialEuroBcv, historialBcv, presupuestos, categorias, historialUsdt] =
       await Promise.all([
         listarBilleteras(db),
         listarMetas(db),
@@ -131,11 +132,12 @@ export default function PantallaInicio() {
         listarHistorial(db, 'BCV'),
         listarPresupuestos(db),
         listarCategorias(db, 'GASTO', { incluirArchivadas: true }),
+        listarHistorial(db, 'PARALELO'),
       ]);
     const historialEuro = { euro: historialEuroBcv, bcv: historialBcv };
     // Disponible al cierre de cada día (30), semana (12) o mes (12) hasta el periodo que se está viendo.
     const cortes = periodos(escala, fin, PUNTOS_LINEA[escala]);
-    const conversor = new Conversor(historial, cambio.dolar, historialEuro, cambio.euro);
+    const conversor = new Conversor(historial, cambio.dolar, historialEuro, cambio.euro, historialUsdt);
     const puntos = await disponibleAl(db, cortes.map((p) => p.hasta), conversor, monedaBase);
     const patrimonio = puntos.map((p, i) => ({ ...p, mes: cortes[i].larga }));
     const hoy = new Date();
@@ -157,6 +159,7 @@ export default function PantallaInicio() {
       filas,
       historial,
       historialEuro,
+      historialUsdt,
       presupuestos,
       categorias,
       pendientes,
@@ -182,7 +185,7 @@ export default function PantallaInicio() {
 
   const reporte = useMemo(() => {
     if (!datos) return null;
-    const conversor = new Conversor(datos.historial, cambio.dolar, datos.historialEuro, cambio.euro);
+    const conversor = new Conversor(datos.historial, cambio.dolar, datos.historialEuro, cambio.euro, datos.historialUsdt);
     const clave = claveMes(mes);
     const delMes = datos.filas.filter((f) => claveDia(f.fecha).startsWith(clave));
     const columnas = periodos(escala, fin, COLUMNAS[escala]);

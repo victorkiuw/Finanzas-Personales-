@@ -160,6 +160,11 @@ export function cambioDe(tasas: Tasas, referencia: ParDolar): Cambio {
   return { dolar, euro: euroSegun(dolar, tasas.BCV?.tasa ?? null, tasas.EURO?.tasa ?? null) };
 }
 
+/** Como `cambioDe`, pero con la BCV y la USDT aparte: los USD van a tasa BCV y los USDT a tasa USDT. */
+export function cambioNatural(tasas: Tasas, referencia: ParDolar): Cambio {
+  return { ...cambioDe(tasas, referencia), bcv: tasas.BCV?.tasa ?? null, usdt: tasas.PARALELO?.tasa ?? null };
+}
+
 /** Tasa de un día ("AAAA-MM-DD"): la de ese día o, si no hubo cotización (fin de semana), la anterior. */
 export async function tasaDelDia(db: BaseDatos, par: Par, dia: string): Promise<number | null> {
   const f = await db.getFirstAsync<{ tasa: number }>(

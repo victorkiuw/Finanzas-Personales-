@@ -104,6 +104,8 @@ export class Conversor {
     private readonly respaldo: number | null,
     private readonly historialEuro: HistorialEuro | null = null,
     private readonly respaldoEuro: number | null = null,
+    /** Historial de la USDT: con él (y la BCV de `historialEuro`) los USD y USDT se convierten cada uno a su tasa. */
+    private readonly historialUsdt: Historial | null = null,
   ) {}
 
   /** Bs. por dólar (según la referencia) del día. */
@@ -115,12 +117,14 @@ export class Conversor {
     const dolar = this.tasaDelDia(dia);
     const h = this.historialEuro;
     const euro = h ? euroSegun(dolar, buscarTasa(h.bcv, dia), buscarTasa(h.euro, dia)) : null;
-    return { dolar, euro: euro ?? this.respaldoEuro };
+    const bcv = h ? buscarTasa(h.bcv, dia) : null;
+    const usdt = this.historialUsdt ? buscarTasa(this.historialUsdt, dia) : null;
+    return { dolar, euro: euro ?? this.respaldoEuro, bcv, usdt };
   }
 
   /** Convierte a la moneda base; null si hace falta una tasa y no hay ninguna. */
   aBase(monto: number, moneda: Moneda, base: Moneda, fechaIso: string): number | null {
-    if (equivalentes(moneda, base)) return monto;
+    if (moneda === base) return monto;
     return convertir(monto, moneda, base, this.cambioDelDia(claveDia(fechaIso)));
   }
 }

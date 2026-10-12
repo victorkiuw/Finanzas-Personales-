@@ -186,10 +186,10 @@ test('calculadora: cada moneda con su propia tasa', async () => {
   assert.equal(convertirNatural(1550000, 'BS', 'USD', t), 1818);
   assert.equal(convertirNatural(1550000, 'BS', 'USDT', t), 1626);
   assert.equal(convertirNatural(1550000, 'BS', 'EUR', t), 1585);
-  // 100 USDT = Bs. 95.325; $100 = 100 USDT; €100 = $114,75.
+  // 100 USDT = Bs. 95.325; $100 BCV = Bs. 85.242 = 89,42 USDT; €100 = Bs. 97.817 = 102,61 USDT.
   assert.equal(convertirNatural(10000, 'USDT', 'BS', t), 9532500);
-  assert.equal(convertirNatural(10000, 'USD', 'USDT', t), 10000);
-  assert.equal(convertirNatural(10000, 'EUR', 'USDT', t), 11475);
+  assert.equal(convertirNatural(10000, 'USD', 'USDT', t), 8942);
+  assert.equal(convertirNatural(10000, 'EUR', 'USDT', t), 10261);
   assert.equal(convertirNatural(10000, 'EUR', 'BS', { ...t, euro: null }), null);
 });
 

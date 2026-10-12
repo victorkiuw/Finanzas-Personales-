@@ -5,7 +5,7 @@ import { AppState } from 'react-native';
 import { guardarPreferencia, leerPreferencia } from '../db/preferencias';
 import {
   actualizarTasasDesdeApi,
-  cambioDe,
+  cambioNatural,
   guardarTasa,
   obtenerTasas,
   sincronizarHistorico,
@@ -177,7 +177,7 @@ export function TasasProvider({ children }: { children: ReactNode }) {
         guardarManual,
         referencia,
         cambiarReferencia,
-        cambio: cambioDe(tasas, referencia),
+        cambio: cambioNatural(tasas, referencia),
         monedaBase,
         cambiarMonedaBase,
         vista,
