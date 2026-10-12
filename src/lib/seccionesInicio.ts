@@ -4,6 +4,8 @@ export type ClaveSeccion =
   | 'billeteras'
   | 'rapidos'
   | 'mes'
+  | 'pronostico'
+  | 'analisis'
   | 'presupuestos'
   | 'categorias'
   | 'columnas'
@@ -20,6 +22,8 @@ export const NOMBRE_SECCION: Record<ClaveSeccion, { nombre: string; icono: strin
   billeteras: { nombre: 'Mis billeteras', icono: 'wallet' },
   rapidos: { nombre: 'Movimientos rápidos', icono: 'lightning-bolt' },
   mes: { nombre: 'Ingresos y egresos del mes', icono: 'calendar-month' },
+  pronostico: { nombre: 'Pronóstico del mes', icono: 'crystal-ball' },
+  analisis: { nombre: 'Fijos, variables y gastos hormiga', icono: 'magnify-scan' },
   presupuestos: { nombre: 'Presupuestos del mes', icono: 'chart-donut' },
   categorias: { nombre: 'Gastos por categoría', icono: 'chart-pie' },
   columnas: { nombre: 'Ingresos vs. gastos', icono: 'chart-bar' },

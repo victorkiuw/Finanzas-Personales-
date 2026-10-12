@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -58,6 +58,11 @@ export default function PantallaMovimientos() {
   const [filas, setFilas] = useState<FilaReporte[]>([]);
   const [filasAnio, setFilasAnio] = useState<FilaReporte[]>([]);
   const [busqueda, setBusqueda] = useState('');
+  // Desde Etiquetas se llega con ?buscar=#viaje.
+  const { buscar } = useLocalSearchParams<{ buscar?: string }>();
+  useEffect(() => {
+    if (buscar) setBusqueda(buscar);
+  }, [buscar]);
   // Se espera a que se deje de escribir para no consultar en cada tecla.
   const [texto, setTexto] = useState('');
   useEffect(() => {

@@ -6,6 +6,7 @@ import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, SegmentedButt
 
 import { AccesosRapidos } from '../../components/AccesosRapidos';
 import { AvisosDetectados } from '../../components/AvisosDetectados';
+import { BarraAnimada } from '../../components/BarraAnimada';
 import { BotonFlotante } from '../../components/BotonFlotante';
 import { CintaTasas } from '../../components/CintaTasas';
 import { DeslizarMes } from '../../components/DeslizarMes';
@@ -48,6 +49,8 @@ import { listarHistorial } from '../../db/tasas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
 import { claveDia, rangoMes } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
+import { fijosVariables, gastosHormiga, pronosticoMes } from '../../lib/analisis';
+import { convertir, totalConsolidado } from '../../lib/conversion';
 import { periodos, type Escala } from '../../lib/periodos';
 import { CLAVE_SECCIONES, leerSecciones, SECCIONES_INICIO, type ClaveSeccion, type Seccion } from '../../lib/seccionesInicio';
 import { DIAS_AVISO_EXPORTAR, diasSinExportar } from '../../lib/respaldoAuto';
@@ -209,15 +212,24 @@ export default function PantallaInicio() {
     const conversor = new Conversor(datos.historial, cambio.dolar, datos.historialEuro, cambio.euro, datos.historialUsdt);
     const clave = claveMes(mes);
     const delMes = datos.filas.filter((f) => claveDia(f.fecha).startsWith(clave));
+    const claveAnterior = claveMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1));
+    const delAnterior = datos.filas.filter((f) => claveDia(f.fecha).startsWith(claveAnterior));
+    const anteriores = new Map(resumirPeriodo(delAnterior, conversor, monedaBase).gastosPorCategoria.map((c) => [c.id, c.total]));
     const columnas = periodos(escala, fin, COLUMNAS[escala]);
+    // Gasto hormiga: hasta el equivalente de $3 en la moneda que se está viendo.
+    const umbral = convertir(300, 'USD', monedaBase, cambio) ?? 300;
     return {
+      anteriores,
+      hormiga: gastosHormiga(delMes, conversor, monedaBase, umbral),
+      umbralHormiga: umbral,
+      fijos: fijosVariables(delMes, conversor, monedaBase),
       presupuestos: estadoPresupuestos(datos.presupuestos, datos.categorias, delMes, conversor),
       resumen: resumirPeriodo(delMes, conversor, monedaBase),
       porMes: totalesPorPeriodo(datos.filas, conversor, monedaBase, columnas),
       etiquetas: columnas.map((p) => p.corta),
       titulos: columnas.map((p) => p.larga),
     };
-  }, [datos, mes, fin, escala, monedaBase, cambio.dolar, cambio.euro]);
+  }, [datos, mes, fin, escala, monedaBase, cambio]);
 
   if (!datos || !reporte) return <ActivityIndicator style={styles.cargando} />;
 
@@ -241,7 +253,16 @@ export default function PantallaInicio() {
     );
   }
 
-  const { resumen, porMes, etiquetas, titulos, presupuestos } = reporte;
+  const { resumen, porMes, etiquetas, titulos, presupuestos, anteriores, hormiga, umbralHormiga, fijos } = reporte;
+  // Disponible de hoy (como en el balance): billeteras que cuentan, sin el dinero de otros.
+  const disponibleHoy = totalConsolidado(
+    datos.billeteras.filter((b) => !b.archivada && b.en_total).map((b) => ({ moneda: b.moneda, saldo: b.saldo - (ajenoPor.get(b.id) ?? 0) })),
+    monedaBase,
+    cambio,
+  );
+  const esMesActual = claveMes(mes) === claveMes(new Date());
+  const pronostico = esMesActual && disponibleHoy !== null ? pronosticoMes(resumen.gastos, disponibleHoy) : null;
+  const totalFijosVariables = fijos.fijos + fijos.variables;
   const colores = coloresSeries(tema.dark);
 
   // Cada sección de Inicio; se muestran en el orden y con la visibilidad que eligió el usuario.
@@ -355,6 +376,64 @@ export default function PantallaInicio() {
           )}
       </View>
     ),
+    pronostico: pronostico ? (
+      <View style={styles.seccion}>
+        <Card mode="contained">
+          <Card.Title title="Pronóstico del mes" left={(p) => <Avatar.Icon {...p} icon="crystal-ball" />} />
+          <Card.Content style={styles.balance}>
+            <Text variant="bodyMedium">
+              {`Llevas ${formatearMonto(resumen.gastos, monedaBase)} gastado en ${pronostico.diasTranscurridos} días (≈ ${formatearMonto(pronostico.porDia, monedaBase)} por día).`}
+            </Text>
+            <Text variant="titleMedium" style={[styles.cifra, styles.negrita, pronostico.finDeMes < 0 && { color: tema.colors.error }]}>
+              {pronostico.finDeMes >= 0
+                ? `A este ritmo terminas el mes con ≈ ${formatearMonto(pronostico.finDeMes, monedaBase)}`
+                : `A este ritmo te faltarían ≈ ${formatearMonto(-pronostico.finDeMes, monedaBase)}`}
+            </Text>
+            <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+              {`Para llegar a fin de mes: máximo ${formatearMonto(pronostico.maximoPorDia, monedaBase)} por día en los ${pronostico.diasRestantes + 1} días que quedan. No cuenta ingresos futuros.`}
+            </Text>
+          </Card.Content>
+        </Card>
+      </View>
+    ) : null,
+    analisis:
+      totalFijosVariables > 0 || hormiga.cantidad > 0 ? (
+        <View style={styles.seccion}>
+          <Card mode="contained">
+            <Card.Title title="¿En qué se va?" left={(p) => <Avatar.Icon {...p} icon="magnify-scan" />} />
+            <Card.Content style={styles.categorias}>
+              {totalFijosVariables > 0 && (
+                <View style={styles.balance}>
+                  <View style={styles.filaFijos}>
+                    <Text variant="bodyMedium">{`Fijos ${formatearMonto(fijos.fijos, monedaBase)}`}</Text>
+                    <Text variant="bodyMedium">{`Variables ${formatearMonto(fijos.variables, monedaBase)}`}</Text>
+                  </View>
+                  <View style={[styles.barraFijos, { backgroundColor: '#F59E0B' }]}>
+                    <BarraAnimada porcentaje={(fijos.fijos / totalFijosVariables) * 100} style={[styles.rellenoFijos, { backgroundColor: '#3B82F6' }]} />
+                  </View>
+                  <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                    Azul: lo que pagas sí o sí (alquiler, servicios…). Naranja: lo que puedes recortar. Marca una categoría como fija al editarla.
+                  </Text>
+                </View>
+              )}
+              {hormiga.cantidad >= 3 && (
+                <View style={styles.balance}>
+                  <Text variant="titleSmall">{`🐜 Gastos hormiga: ${formatearMonto(hormiga.total, monedaBase)}`}</Text>
+                  <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+                    {`${hormiga.cantidad} gastos pequeños (de hasta ${formatearMonto(umbralHormiga, monedaBase)}) este mes. Más en: ${hormiga.categorias
+                      .slice(0, 3)
+                      .map((c) => `${c.nombre} (${c.cantidad})`)
+                      .join(', ')}.`}
+                  </Text>
+                </View>
+              )}
+              <Button mode="text" icon="pound" style={styles.izquierda} onPress={() => router.push('/etiquetas')}>
+                Ver por etiquetas (#viaje, #moto…)
+              </Button>
+            </Card.Content>
+          </Card>
+        </View>
+      ) : null,
     presupuestos: (
       <View style={styles.seccion}>
           <Card mode="contained">
@@ -377,7 +456,7 @@ export default function PantallaInicio() {
     categorias: (
       <View style={styles.seccion}>
           <Card mode="contained">
-            <Card.Title title="Gastos por categoría" subtitle="Toca una para ver sus gastos" />
+            <Card.Title title="Gastos por categoría" subtitle="Toca una para ver sus gastos · % vs. el mes pasado" />
             <Card.Content style={styles.categorias}>
               {resumen.gastos > 0 && (
                 <Dona
@@ -398,6 +477,7 @@ export default function PantallaInicio() {
               <BarrasCategorias
                 categorias={resumen.gastosPorCategoria}
                 moneda={monedaBase}
+                anteriores={anteriores}
                 detalle={(id) => <GastosDeCategoria categoriaId={id} {...rangoMes(mes)} />}
               />
             </Card.Content>
@@ -552,5 +632,9 @@ const styles = StyleSheet.create({
   balance: { gap: 2 },
   categorias: { gap: 16 },
   flujo: { gap: 12 },
+  filaFijos: { flexDirection: 'row', justifyContent: 'space-between' },
+  barraFijos: { height: 12, borderRadius: 6, overflow: 'hidden' },
+  rellenoFijos: { height: 12 },
+  izquierda: { alignSelf: 'flex-start' },
   fab: { position: 'absolute', right: 16, bottom: 16, borderRadius: 999 },
 });

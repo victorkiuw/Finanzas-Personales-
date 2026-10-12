@@ -10,6 +10,8 @@ export interface Categoria {
   color_hex: string;
   icono: string;
   archivada: boolean;
+  /** Gasto fijo (alquiler, servicios…): se separa de los variables en los reportes. */
+  fija: boolean;
 }
 
 export interface DatosCategoria {
@@ -17,6 +19,7 @@ export interface DatosCategoria {
   tipo: TipoCategoria;
   color_hex: string;
   icono: string;
+  fija?: boolean;
 }
 
 export const LARGO_MAXIMO_NOMBRE_CATEGORIA = 30;
@@ -24,8 +27,8 @@ export const LARGO_MAXIMO_NOMBRE_CATEGORIA = 30;
 /** Categoría a la que van las comisiones bancarias automáticas. */
 export const NOMBRE_CATEGORIA_COMISIONES = 'Comisiones';
 
-type FilaCategoria = Omit<Categoria, 'archivada'> & { archivada: number };
-const aCategoria = (f: FilaCategoria): Categoria => ({ ...f, archivada: f.archivada === 1 });
+type FilaCategoria = Omit<Categoria, 'archivada' | 'fija'> & { archivada: number; fija: number };
+const aCategoria = (f: FilaCategoria): Categoria => ({ ...f, archivada: f.archivada === 1, fija: f.fija === 1 });
 
 export async function listarCategorias(
   db: BaseDatos,
@@ -34,7 +37,7 @@ export async function listarCategorias(
 ): Promise<Categoria[]> {
   const condiciones = [tipo ? 'tipo = ?' : null, incluirArchivadas ? null : 'archivada = 0'].filter(Boolean);
   const filas = await db.getAllAsync<FilaCategoria>(
-    `SELECT id, nombre, tipo, color_hex, icono, archivada FROM categorias
+    `SELECT id, nombre, tipo, color_hex, icono, archivada, fija FROM categorias
      ${condiciones.length ? 'WHERE ' + condiciones.join(' AND ') : ''}
      ORDER BY archivada, tipo, orden = 0, orden, nombre COLLATE NOCASE`,
     tipo ? [tipo] : [],
@@ -44,7 +47,7 @@ export async function listarCategorias(
 
 export async function obtenerCategoria(db: BaseDatos, id: number): Promise<Categoria | null> {
   const f = await db.getFirstAsync<FilaCategoria>(
-    `SELECT id, nombre, tipo, color_hex, icono, archivada FROM categorias WHERE id = ?`,
+    `SELECT id, nombre, tipo, color_hex, icono, archivada, fija FROM categorias WHERE id = ?`,
     [id],
   );
   return f ? aCategoria(f) : null;
@@ -74,11 +77,12 @@ async function validar(db: BaseDatos, d: DatosCategoria, id?: number): Promise<D
 
 export async function crearCategoria(db: BaseDatos, datos: DatosCategoria): Promise<number> {
   const d = await validar(db, datos);
-  const r = await db.runAsync(`INSERT INTO categorias (nombre, tipo, color_hex, icono) VALUES (?, ?, ?, ?)`, [
+  const r = await db.runAsync(`INSERT INTO categorias (nombre, tipo, color_hex, icono, fija) VALUES (?, ?, ?, ?, ?)`, [
     d.nombre,
     d.tipo,
     d.color_hex,
     d.icono,
+    d.tipo === 'GASTO' && d.fija ? 1 : 0,
   ]);
   return r.lastInsertRowId;
 }
@@ -91,11 +95,12 @@ export async function actualizarCategoria(db: BaseDatos, id: number, datos: Dato
   if (d.tipo !== actual.tipo && (await contarUsosCategoria(db, id)) > 0) {
     throw new ErrorValidacion('No se puede cambiar el tipo de una categoría con movimientos.');
   }
-  await db.runAsync(`UPDATE categorias SET nombre = ?, tipo = ?, color_hex = ?, icono = ? WHERE id = ?`, [
+  await db.runAsync(`UPDATE categorias SET nombre = ?, tipo = ?, color_hex = ?, icono = ?, fija = ? WHERE id = ?`, [
     d.nombre,
     d.tipo,
     d.color_hex,
     d.icono,
+    d.tipo === 'GASTO' && (d.fija ?? actual.fija) ? 1 : 0,
     id,
   ]);
 }

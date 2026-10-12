@@ -413,6 +413,11 @@ const MIGRACIONES: (string | Migracion)[] = [
   ALTER TABLE billeteras ADD COLUMN orden INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE categorias ADD COLUMN orden INTEGER NOT NULL DEFAULT 0;
   `,
+  // v15: gastos fijos (alquiler, servicios…) para separarlos de los variables.
+  `
+  ALTER TABLE categorias ADD COLUMN fija INTEGER NOT NULL DEFAULT 0 CHECK (fija IN (0, 1));
+  UPDATE categorias SET fija = 1 WHERE tipo = 'GASTO' AND nombre IN ('Hogar', 'Servicios');
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

@@ -20,6 +20,10 @@ export interface FilaReporte {
   categoria_nombre: string;
   categoria_icono: string;
   categoria_color: string;
+  /** 1 si la categoría es de gasto fijo. */
+  categoria_fija?: number;
+  /** Nota del movimiento (para las etiquetas #). */
+  nota?: string | null;
 }
 
 export async function filasDeReporte(
@@ -44,7 +48,8 @@ export async function filasDeReporte(
   }
   return db.getAllAsync<FilaReporte>(
     `SELECT t.fecha, t.tipo, t.monto, o.moneda, t.categoria_id,
-       c.nombre AS categoria_nombre, c.icono AS categoria_icono, c.color_hex AS categoria_color
+       c.nombre AS categoria_nombre, c.icono AS categoria_icono, c.color_hex AS categoria_color,
+       c.fija AS categoria_fija, t.nota
      FROM transacciones t
      JOIN billeteras o ON o.id = t.billetera_origen_id
      JOIN categorias c ON c.id = t.categoria_id

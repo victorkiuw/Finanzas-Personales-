@@ -384,3 +384,20 @@ export async function ultimaTasa(db: BaseDatos, de: Moneda, a: Moneda): Promise<
   );
   return f?.tasa_cambio ?? null;
 }
+
+/** Etiquetas (#algo) usadas en las notas, de la más reciente a la más vieja. */
+export async function listarEtiquetas(db: BaseDatos, limite = 12): Promise<string[]> {
+  const filas = await db.getAllAsync<{ nota: string }>(
+    `SELECT nota FROM transacciones WHERE nota LIKE '%#%' ORDER BY fecha DESC LIMIT 300`,
+    [],
+  );
+  const vistas: string[] = [];
+  for (const f of filas) {
+    for (const e of f.nota.match(/#[\p{L}\p{N}_-]+/gu) ?? []) {
+      const t = e.toLowerCase();
+      if (!vistas.includes(t)) vistas.push(t);
+      if (vistas.length >= limite) return vistas;
+    }
+  }
+  return vistas;
+}

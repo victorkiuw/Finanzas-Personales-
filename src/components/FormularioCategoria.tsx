@@ -2,7 +2,7 @@ import { router, Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Avatar, Button, HelperText, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Button, HelperText, IconButton, SegmentedButtons, Switch, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { ErrorValidacion } from '../db/billeteras';
 import {
@@ -34,6 +34,7 @@ export function FormularioCategoria({ id, tipoInicial = 'GASTO' }: Props) {
   const [tipo, setTipo] = useState<TipoCategoria>(tipoInicial);
   const [icono, setIcono] = useState<string>('tag');
   const [color, setColor] = useState<string>(COLORES_CATEGORIA[0]);
+  const [fija, setFija] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -50,6 +51,7 @@ export function FormularioCategoria({ id, tipoInicial = 'GASTO' }: Props) {
       setTipo(c.tipo);
       setIcono(c.icono);
       setColor(c.color_hex);
+      setFija(c.fija);
       setUsos(await contarUsosCategoria(db, id));
       setCargando(false);
     })().catch((e) => Alert.alert('Error', String(e)));
@@ -58,7 +60,7 @@ export function FormularioCategoria({ id, tipoInicial = 'GASTO' }: Props) {
   const guardar = async () => {
     setGuardando(true);
     setError(null);
-    const datos = { nombre, tipo, icono, color_hex: color };
+    const datos = { nombre, tipo, icono, color_hex: color, fija };
     try {
       if (id === undefined) await crearCategoria(db, datos);
       else await actualizarCategoria(db, id, datos);
@@ -161,6 +163,18 @@ export function FormularioCategoria({ id, tipoInicial = 'GASTO' }: Props) {
         </View>
       </View>
 
+      {tipo === 'GASTO' && (
+        <View style={styles.filaFija}>
+          <View style={styles.flexFija}>
+            <Text variant="labelLarge">Es un gasto fijo</Text>
+            <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+              Lo pagas todos los meses sí o sí (alquiler, servicios, internet). Se separa de los variables en Inicio.
+            </Text>
+          </View>
+          <Switch value={fija} onValueChange={setFija} />
+        </View>
+      )}
+
       {error && <HelperText type="error">{error}</HelperText>}
       <Button mode="contained" onPress={guardar} loading={guardando} disabled={guardando}>
         Guardar
@@ -192,6 +206,8 @@ export function FormularioCategoria({ id, tipoInicial = 'GASTO' }: Props) {
 }
 
 const styles = StyleSheet.create({
+  filaFija: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  flexFija: { flex: 1 },
   cargando: { marginTop: 48 },
   contenido: { padding: 16, gap: 16, paddingBottom: 48 },
   vistaPrevia: { alignItems: 'center', gap: 8 },

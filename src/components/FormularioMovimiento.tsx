@@ -33,6 +33,7 @@ import {
   obtenerMovimiento,
   type Movimiento,
   type TipoMovimiento,
+  listarEtiquetas,
 } from '../db/movimientos';
 import { elegirComprobante } from '../lib/comprobantes';
 import { formatearFechaCorta, formatearHora } from '../lib/fechas';
@@ -97,6 +98,11 @@ export function FormularioMovimiento({
   const [moviendo, setMoviendo] = useState(false);
   // Teclado numérico propio para el monto (se abre al tocar el campo).
   const [teclado, setTeclado] = useState(false);
+  // Etiquetas (#viaje…) usadas antes, para agregarlas a la nota con un toque.
+  const [etiquetas, setEtiquetas] = useState<string[]>([]);
+  useEffect(() => {
+    listarEtiquetas(db).then(setEtiquetas).catch(() => {});
+  }, [db]);
 
   const [tipo, setTipo] = useState<TipoMovimiento>(tipoInicial);
   const [montoTexto, setMontoTexto] = useState('');
@@ -831,7 +837,20 @@ export function FormularioMovimiento({
           maxLength={LARGO_MAXIMO_NOTA}
           mode="outlined"
           multiline
+          placeholder="Ej.: gasolina #viaje"
         />
+        {etiquetas.length > 0 && (
+          <View style={styles.chips}>
+            {etiquetas
+              .filter((e) => !nota.toLowerCase().includes(e))
+              .slice(0, 8)
+              .map((e) => (
+                <Chip key={e} compact icon="pound" onPress={() => setNota((n) => `${n.trim()} ${e}`.trim())}>
+                  {e.slice(1)}
+                </Chip>
+              ))}
+          </View>
+        )}
 
         {error && <HelperText type="error">{error}</HelperText>}
 

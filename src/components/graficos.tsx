@@ -27,10 +27,13 @@ export function BarrasCategorias({
   categorias,
   moneda,
   detalle,
+  anteriores,
 }: {
   categorias: TotalCategoria[];
   moneda: Moneda;
   detalle?: (categoriaId: number) => ReactNode;
+  /** Gasto del mes anterior por categoría, para mostrar si subió o bajó. */
+  anteriores?: Map<number, number>;
 }) {
   const tema = useTheme();
   const [elegida, setElegida] = useState<number | null>(null);
@@ -82,6 +85,7 @@ export function BarrasCategorias({
                 <Text variant="bodySmall" style={[styles.porcentaje, { color: tema.colors.onSurfaceVariant }]}>
                   {`${porcentaje}%`}
                 </Text>
+                {anteriores && c.id !== -1 && <Cambio actual={c.total} anterior={anteriores.get(c.id) ?? 0} />}
               </View>
               <View style={[styles.pista, { backgroundColor: tema.colors.outlineVariant }]}>
                 <BarraAnimada
@@ -209,3 +213,16 @@ const styles = StyleSheet.create({
   etiqueta: { flex: 1, textAlign: 'center' },
   detalle: { marginTop: 12, gap: 2 },
 });
+
+/** "+23 %" en rojo si se gastó más que el mes pasado, "−10 %" en verde si menos. */
+function Cambio({ actual, anterior }: { actual: number; anterior: number }) {
+  const tema = useTheme();
+  const v = anterior > 0 ? Math.round(((actual - anterior) / anterior) * 100) : null;
+  const texto = v === null ? 'nuevo' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}%`;
+  const color = v === null ? tema.colors.onSurfaceVariant : v > 0 ? (tema.dark ? '#F87171' : '#C62828') : v < 0 ? (tema.dark ? '#4ADE80' : '#2E7D32') : tema.colors.onSurfaceVariant;
+  return (
+    <Text variant="labelSmall" style={{ color, width: 44, textAlign: 'right', fontVariant: ['tabular-nums'] }}>
+      {texto}
+    </Text>
+  );
+}
