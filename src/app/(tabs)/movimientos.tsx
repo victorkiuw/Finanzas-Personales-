@@ -6,6 +6,7 @@ import { Badge, FAB, IconButton, Searchbar, Text, useTheme } from 'react-native-
 
 import { BotonFlotante } from '../../components/BotonFlotante';
 import { CalendarioMes } from '../../components/CalendarioMes';
+import { DeslizarMes } from '../../components/DeslizarMes';
 import { DialogoDictado } from '../../components/DialogoDictado';
 import { COLOR_GASTO, COLOR_GASTO_OSCURO, COLOR_INGRESO, COLOR_INGRESO_OSCURO } from '../../components/ItemMovimiento';
 import { ListaMovimientos } from '../../components/ListaMovimientos';
@@ -268,6 +269,7 @@ export default function PantallaMovimientos() {
         encabezado={
           <View>
             {cabecera}
+            <DeslizarMes mes={mes} onCambio={cambiarMes}>
             {!buscando && (
               <View style={styles.seccion}>
                 <SelectorMes mes={mes} onCambio={cambiarMes} />
@@ -289,6 +291,7 @@ export default function PantallaMovimientos() {
                 </Text>
               </View>
             )}
+            </DeslizarMes>
           </View>
         }
         textoVacio={

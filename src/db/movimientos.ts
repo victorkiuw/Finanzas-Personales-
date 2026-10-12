@@ -232,6 +232,30 @@ export async function crearMovimiento(db: BaseDatos, datos: DatosMovimiento): Pr
   });
 }
 
+/**
+ * Repite un gasto, ingreso o transferencia con la fecha indicada (por defecto
+ * ahora), con su comisión si tenía. Los de metas, deudas, cuotas y las
+ * comisiones sueltas no se duplican.
+ */
+export async function duplicarMovimiento(db: BaseDatos, id: number, fecha = new Date().toISOString()): Promise<number> {
+  const m = await obtenerMovimiento(db, id);
+  if (!m) throw new ErrorValidacion('El movimiento no existe.');
+  if (!['GASTO', 'INGRESO', 'TRANSFERENCIA'].includes(m.tipo) || m.meta_id !== null || m.deuda_id !== null || m.compra_id !== null || m.comision_de !== null) {
+    throw new ErrorValidacion('Este movimiento no se puede duplicar.');
+  }
+  return crearMovimiento(db, {
+    tipo: m.tipo as TipoMovimiento,
+    monto: m.monto,
+    fecha,
+    billetera_origen_id: m.billetera_origen_id,
+    categoria_id: m.categoria_id,
+    billetera_destino_id: m.billetera_destino_id,
+    monto_destino: m.monto_destino,
+    nota: m.nota,
+    comision: m.comision ?? 0,
+  });
+}
+
 export async function actualizarMovimiento(db: BaseDatos, id: number, datos: DatosMovimiento): Promise<void> {
   const actual = await obtenerMovimiento(db, id);
   if (!actual) throw new ErrorValidacion('El movimiento no existe.');

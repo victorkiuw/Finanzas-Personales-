@@ -39,3 +39,22 @@ test('montos cortos para el calendario', () => {
   assert.equal(montoCompacto(100000), '1k');
   assert.equal(montoCompacto(340000000), '3,4M');
 });
+
+test('duplicar un gasto con su comisión, pero no un movimiento de deuda', async () => {
+  const { duplicarMovimiento, listarMovimientos } = await import('../src/db/movimientos');
+  const { crearDeuda } = await import('../src/db/deudas');
+  const { obtenerBilletera } = await import('../src/db/billeteras');
+  const db = await crearBdMemoria();
+  const banco = await crearBilletera(db, { icono: 'bank', color_hex: '#000000', nombre: 'Banco', moneda: 'BS', balance_inicial: 1000000 });
+  const [comida] = await listarCategorias(db, 'GASTO');
+  const id = await crearMovimiento(db, { tipo: 'GASTO', monto: 10000, fecha: new Date(2026, 9, 1).toISOString(), billetera_origen_id: banco, categoria_id: comida.id, nota: 'pan', comision: 1400 });
+  const copia = await duplicarMovimiento(db, id);
+  assert.notEqual(copia, id);
+  assert.equal((await obtenerBilletera(db, banco))!.saldo, 1000000 - 2 * (10000 + 1400));
+  const lista = await listarMovimientos(db, {});
+  assert.equal(lista.filter((m) => m.nota === 'pan').length, 2);
+
+  await crearDeuda(db, { tipo: 'ME_DEBEN', persona: 'Ana', moneda: 'BS', monto: 5000, tasa_referencia: 100, fecha: new Date().toISOString(), billetera_id: banco });
+  const prestamo = (await listarMovimientos(db, {})).find((m) => m.tipo === 'PRESTAMO_DADO')!;
+  await assert.rejects(duplicarMovimiento(db, prestamo.id), /no se puede duplicar/);
+});

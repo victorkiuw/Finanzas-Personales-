@@ -8,6 +8,7 @@ import { AccesosRapidos } from '../../components/AccesosRapidos';
 import { AvisosDetectados } from '../../components/AvisosDetectados';
 import { BotonFlotante } from '../../components/BotonFlotante';
 import { CintaTasas } from '../../components/CintaTasas';
+import { DeslizarMes } from '../../components/DeslizarMes';
 import { DialogoDictado } from '../../components/DialogoDictado';
 import { Dona } from '../../components/Dona';
 import { CLAVE_GUIA, GuiaBienvenida } from '../../components/GuiaBienvenida';
@@ -342,8 +343,12 @@ export default function PantallaInicio() {
         <MovimientosRapidos plantillas={datos.plantillas} onCambio={() => cargar().catch(() => {})} />
 
         <View style={styles.seccion}>
-          <SelectorMes mes={mes} onCambio={setMes} />
-          <TarjetasFlujo ingresos={resumen.ingresos} gastos={resumen.gastos} moneda={monedaBase} />
+          <DeslizarMes mes={mes} onCambio={setMes}>
+            <View style={styles.flujo}>
+              <SelectorMes mes={mes} onCambio={setMes} />
+              <TarjetasFlujo ingresos={resumen.ingresos} gastos={resumen.gastos} moneda={monedaBase} />
+            </View>
+          </DeslizarMes>
           <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
             {`Montos en ${NOMBRE_MONEDA_BASE[monedaBase]}, cada movimiento convertido con la tasa ${NOMBRE_PAR[referencia]} de su día. No incluye transferencias ni metas.`}
             {resumen.incompleto ? ' Faltan tasas para convertir algunos movimientos en Bs.' : ''}
@@ -505,5 +510,6 @@ const styles = StyleSheet.create({
   muestra: { width: 10, height: 10, borderRadius: 2 },
   balance: { gap: 2 },
   categorias: { gap: 16 },
+  flujo: { gap: 12 },
   fab: { position: 'absolute', right: 16, bottom: 16, borderRadius: 999 },
 });

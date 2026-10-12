@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Chip, Menu } from 'react-native-paper';
+import { Chip, List } from 'react-native-paper';
+
+import { HojaInferior } from './HojaInferior';
 
 export interface OpcionFiltro<T> {
   valor: T;
@@ -18,40 +20,48 @@ interface Props<T> {
   onCambio: (valor: T | undefined) => void;
 }
 
-/** Chip que abre un menú de opciones; con un valor elegido muestra una × para quitarlo. */
+/** Chip que abre una ventana desde abajo con las opciones; con un valor elegido muestra una × para quitarlo. */
 export function MenuFiltro<T>({ etiqueta, icono, opciones, valor, etiquetaValor, onCambio }: Props<T>) {
   const [abierto, setAbierto] = useState(false);
   const elegida = opciones.find((o) => o.valor === valor);
   const activo = valor !== undefined;
 
   return (
-    <Menu
-      visible={abierto}
-      onDismiss={() => setAbierto(false)}
-      anchor={
-        <Chip
-          icon={icono}
-          mode={activo ? 'flat' : 'outlined'}
-          selected={activo}
-          showSelectedCheck={false}
-          onPress={() => setAbierto(true)}
-          onClose={activo ? () => onCambio(undefined) : undefined}
-        >
-          {etiquetaValor ?? elegida?.etiqueta ?? etiqueta}
-        </Chip>
-      }
-    >
-      {opciones.map((o) => (
-        <Menu.Item
-          key={String(o.valor)}
-          leadingIcon={o.icono}
-          title={o.etiqueta}
-          onPress={() => {
-            setAbierto(false);
-            onCambio(o.valor);
-          }}
-        />
-      ))}
-    </Menu>
+    <>
+      <Chip
+        icon={icono}
+        mode={activo ? 'flat' : 'outlined'}
+        selected={activo}
+        showSelectedCheck={false}
+        onPress={() => setAbierto(true)}
+        onClose={activo ? () => onCambio(undefined) : undefined}
+      >
+        {etiquetaValor ?? elegida?.etiqueta ?? etiqueta}
+      </Chip>
+      <HojaInferior visible={abierto} titulo={etiqueta} onCerrar={() => setAbierto(false)}>
+        {activo && (
+          <List.Item
+            title="Todas"
+            left={(p) => <List.Icon {...p} icon="close-circle-outline" />}
+            onPress={() => {
+              setAbierto(false);
+              onCambio(undefined);
+            }}
+          />
+        )}
+        {opciones.map((o) => (
+          <List.Item
+            key={String(o.valor)}
+            title={o.etiqueta}
+            left={(p) => <List.Icon {...p} icon={o.icono ?? 'circle-small'} />}
+            right={(p) => (o.valor === valor ? <List.Icon {...p} icon="check" /> : null)}
+            onPress={() => {
+              setAbierto(false);
+              onCambio(o.valor);
+            }}
+          />
+        ))}
+      </HojaInferior>
+    </>
   );
 }

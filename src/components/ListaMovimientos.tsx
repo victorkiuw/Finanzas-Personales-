@@ -1,15 +1,31 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Alert, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Snackbar, Text, useTheme } from 'react-native-paper';
 
-import { listarMovimientos, type FiltroMovimientos, type Movimiento } from '../db/movimientos';
+import { ErrorValidacion } from '../db/billeteras';
+import {
+  duplicarMovimiento,
+  eliminarMovimiento,
+  listarMovimientos,
+  type FiltroMovimientos,
+  type Movimiento,
+} from '../db/movimientos';
 import { claveDia, formatearDia } from '../lib/fechas';
 import { formatearMonto, type Moneda } from '../lib/moneda';
+import { useListo } from './ConfirmacionListo';
+import { FilaDeslizable } from './FilaDeslizable';
 import { COLOR_GASTO, COLOR_GASTO_OSCURO, COLOR_INGRESO, COLOR_INGRESO_OSCURO, ItemMovimiento } from './ItemMovimiento';
 
 const TAMANO_PAGINA = 40;
+/** Segundos para deshacer un borrado antes de que se haga de verdad. */
+const ESPERA_BORRADO = 4000;
+
+/** Se puede repetir: gastos, ingresos y transferencias normales (no metas, deudas, cuotas ni comisiones). */
+function duplicable(m: Movimiento): boolean {
+  return ['GASTO', 'INGRESO', 'TRANSFERENCIA'].includes(m.tipo) && m.meta_id === null && m.deuda_id === null && m.compra_id === null && m.comision_de === null;
+}
 
 interface Props {
   filtro: Omit<FiltroMovimientos, 'limite' | 'desplazamiento'>;
@@ -27,6 +43,11 @@ interface Props {
 export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movimientos.', totalesDia, monedaTotales, onRefrescar }: Props) {
   const [refrescando, setRefrescando] = useState(false);
   const db = useSQLiteContext();
+  const mostrarListo = useListo();
+  // Borrado con "Deshacer": se oculta enseguida y se borra de verdad a los pocos segundos.
+  const [ocultos, setOcultos] = useState<Set<number>>(() => new Set());
+  const [aviso, setAviso] = useState<string | null>(null);
+  const pendiente = useRef<{ id: number; temporizador: ReturnType<typeof setTimeout> } | null>(null);
   const tema = useTheme();
   const [items, setItems] = useState<Movimiento[] | null>(null);
   const [hayMas, setHayMas] = useState(true);
@@ -50,6 +71,66 @@ export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movi
     }, [recargar]),
   );
 
+  const confirmarBorrado = useCallback(async () => {
+    const p = pendiente.current;
+    if (!p) return;
+    clearTimeout(p.temporizador);
+    pendiente.current = null;
+    try {
+      await eliminarMovimiento(db, p.id);
+    } catch (e) {
+      Alert.alert('No se pudo eliminar', e instanceof ErrorValidacion ? e.message : String(e));
+    }
+    setOcultos((o) => {
+      const n = new Set(o);
+      n.delete(p.id);
+      return n;
+    });
+    await recargar().catch(() => {});
+  }, [db, recargar]);
+
+  // Si se sale de la pantalla con un borrado pendiente, se hace en ese momento.
+  useEffect(
+    () => () => {
+      const p = pendiente.current;
+      if (p) {
+        clearTimeout(p.temporizador);
+        eliminarMovimiento(db, p.id).catch(() => {});
+      }
+    },
+    [db],
+  );
+
+  const eliminar = (m: Movimiento) => {
+    if (pendiente.current) confirmarBorrado().catch(() => {});
+    setOcultos((o) => new Set(o).add(m.id));
+    setAviso('Movimiento eliminado');
+    pendiente.current = { id: m.id, temporizador: setTimeout(() => confirmarBorrado().catch(() => {}), ESPERA_BORRADO) };
+  };
+
+  const deshacer = () => {
+    const p = pendiente.current;
+    if (!p) return;
+    clearTimeout(p.temporizador);
+    pendiente.current = null;
+    setOcultos((o) => {
+      const n = new Set(o);
+      n.delete(p.id);
+      return n;
+    });
+    setAviso(null);
+  };
+
+  const duplicar = async (m: Movimiento) => {
+    try {
+      await duplicarMovimiento(db, m.id);
+      mostrarListo('Repetido con fecha de hoy');
+      await recargar();
+    } catch (e) {
+      Alert.alert('No se pudo duplicar', e instanceof ErrorValidacion ? e.message : String(e));
+    }
+  };
+
   const cargarMas = async () => {
     if (!items || !hayMas || cargandoMas.current) return;
     cargandoMas.current = true;
@@ -72,6 +153,7 @@ export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movi
     const grupos: { titulo: string; dia: string; data: Movimiento[] }[] = [];
     let actual = '';
     for (const m of items ?? []) {
+      if (ocultos.has(m.id)) continue;
       const dia = claveDia(m.fecha);
       if (dia !== actual) {
         actual = dia;
@@ -80,11 +162,12 @@ export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movi
       grupos[grupos.length - 1].data.push(m);
     }
     return grupos;
-  }, [items]);
+  }, [items, ocultos]);
 
   if (!items) return <ActivityIndicator style={styles.cargando} />;
 
   return (
+    <View style={styles.flex}>
     <SectionList
       sections={secciones}
       keyExtractor={(m) => String(m.id)}
@@ -98,12 +181,16 @@ export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movi
             index === section.data.length - 1 && styles.ultima,
           ]}
         >
-          <ItemMovimiento
-            movimiento={item}
-            billeteraId={filtro.billeteraId}
-            enMeta={filtro.metaId !== undefined}
-            onPress={() => router.push(`/movimiento/${item.id}`)}
-          />
+          <FilaDeslizable onEliminar={() => eliminar(item)} onDuplicar={duplicable(item) ? () => duplicar(item) : undefined}>
+            <View style={{ backgroundColor: tema.colors.surfaceVariant }}>
+              <ItemMovimiento
+                movimiento={item}
+                billeteraId={filtro.billeteraId}
+                enMeta={filtro.metaId !== undefined}
+                onPress={() => router.push(`/movimiento/${item.id}`)}
+              />
+            </View>
+          </FilaDeslizable>
         </View>
       )}
       renderSectionHeader={({ section }) => {
@@ -153,6 +240,15 @@ export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movi
       }
       stickySectionHeadersEnabled={false}
     />
+      <Snackbar
+        visible={aviso !== null}
+        onDismiss={() => setAviso(null)}
+        duration={ESPERA_BORRADO}
+        action={{ label: 'Deshacer', onPress: deshacer }}
+      >
+        {aviso}
+      </Snackbar>
+    </View>
   );
 }
 
