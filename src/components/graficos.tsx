@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Avatar, Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from 'react-native-paper';
 
 import type { TotalCategoria, TotalMes } from '../db/reportes';
 import { formatearMonto, type Moneda } from '../lib/moneda';
+import { IconoCuadro } from './IconoCuadro';
 
 /*
  * Gráficos hechos con vistas (sin dependencias nativas). Colores de la paleta
@@ -68,7 +69,7 @@ export function BarrasCategorias({
             accessibilityState={detalle ? { expanded: abierta } : undefined}
             accessibilityLabel={`${c.nombre}: ${formatearMonto(c.total, moneda)}, ${porcentaje}%`}
           >
-            <Avatar.Icon size={32} icon={c.icono} color="#FFFFFF" style={{ backgroundColor: c.color }} />
+            <IconoCuadro icono={c.icono} color={c.color} tamano={36} />
             <View style={styles.flex}>
               <View style={styles.filaTextos}>
                 <Text variant="bodyMedium" numberOfLines={1} style={styles.flex}>

@@ -1,28 +1,89 @@
 import { MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'react-native-paper';
 
+/*
+ * Diseño inspirado en Rial: fondo negro, tarjetas grises muy redondeadas sin
+ * bordes y un solo acento verde lima para lo importante (botones, lo elegido).
+ */
+export const LIMA = '#B5E61D';
+
 export const temaClaro: MD3Theme = {
   ...MD3LightTheme,
+  roundness: 6,
   colors: {
     ...MD3LightTheme.colors,
-    primary: '#1B6B4A',
-    primaryContainer: '#A6F2C8',
-    onPrimaryContainer: '#002112',
-    secondaryContainer: '#CFE9DA',
-    background: '#F6F8F6',
+    primary: '#4D7C0F',
+    onPrimary: '#FFFFFF',
+    primaryContainer: LIMA,
+    onPrimaryContainer: '#142200',
+    secondary: '#56642F',
+    secondaryContainer: '#E3F5B8',
+    onSecondaryContainer: '#1A2600',
+    tertiaryContainer: '#FFE7B8',
+    background: '#F4F5F1',
+    surface: '#F4F5F1',
+    surfaceVariant: '#FFFFFF',
+    onSurfaceVariant: '#5B5F57',
+    outline: '#C5C8BF',
+    outlineVariant: '#E2E4DD',
+    elevation: {
+      level0: 'transparent',
+      level1: '#FFFFFF',
+      level2: '#FBFCF8',
+      level3: '#F6F8F1',
+      level4: '#F3F5EE',
+      level5: '#EFF2E9',
+    },
   },
 };
 
 export const temaOscuro: MD3Theme = {
   ...MD3DarkTheme,
+  roundness: 6,
   colors: {
     ...MD3DarkTheme.colors,
-    primary: '#8BD6AD',
-    primaryContainer: '#005234',
-    onPrimaryContainer: '#A6F2C8',
-    secondaryContainer: '#344B3F',
-    background: '#111412',
+    primary: LIMA,
+    onPrimary: '#0E1700',
+    primaryContainer: LIMA,
+    onPrimaryContainer: '#0E1700',
+    secondary: '#C9E879',
+    secondaryContainer: '#2C3A0E',
+    onSecondaryContainer: '#DDF59A',
+    tertiaryContainer: '#3D2E0B',
+    onTertiaryContainer: '#FFDFA0',
+    background: '#000000',
+    surface: '#000000',
+    onSurface: '#F2F3EE',
+    surfaceVariant: '#1D1E21',
+    onSurfaceVariant: '#A3A6AD',
+    surfaceDisabled: 'rgba(242, 243, 238, 0.12)',
+    outline: '#3B3D42',
+    outlineVariant: '#2A2C30',
+    inverseSurface: '#E9EAE4',
+    elevation: {
+      level0: 'transparent',
+      level1: '#16171A',
+      level2: '#1D1E21',
+      level3: '#232428',
+      level4: '#26272B',
+      level5: '#2A2B30',
+    },
   },
 };
+
+/** Fondo de la tarjeta principal (el balance) y de los botones redondos. */
+export function coloresExtra(oscuro: boolean) {
+  return oscuro
+    ? { heroe: '#1A2405', heroeTexto: '#F2F3EE', redondo: '#1D1E21', barra: '#111214' }
+    : { heroe: '#E8F6C4', heroeTexto: '#142200', redondo: '#FFFFFF', barra: '#FFFFFF' };
+}
+
+/** Color con transparencia (para fondos suaves de íconos): `#RRGGBB` + alfa 0–1. */
+export function conAlfa(hex: string, alfa: number): string {
+  const a = Math.round(Math.min(Math.max(alfa, 0), 1) * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? `${hex}${a}` : hex;
+}
 
 export const ICONOS_BILLETERA = [
   'wallet',

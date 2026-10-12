@@ -5,25 +5,49 @@ import type { ComponentProps } from 'react';
 import { View, type ColorValue } from 'react-native';
 import { IconButton, useTheme } from 'react-native-paper';
 
-import { useModoDiscreto } from '../../components/ModoDiscreto';
+import { coloresExtra } from '../../lib/tema';
 
 type NombreIcono = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
+/** Ícono de pestaña; la elegida va dentro de una pastilla de color (como en Rial). */
 const icono =
   (name: NombreIcono) =>
-  ({ color, size }: { color: ColorValue; size: number }) => <MaterialCommunityIcons name={name} color={color} size={size} />;
+  ({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) => (
+    <PastillaIcono activa={focused}>
+      <MaterialCommunityIcons name={name} color={color} size={size} />
+    </PastillaIcono>
+  );
+
+function PastillaIcono({ activa, children }: { activa: boolean; children: React.ReactNode }) {
+  const tema = useTheme();
+  return (
+    <View
+      style={{
+        paddingHorizontal: 18,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: activa ? tema.colors.secondaryContainer : 'transparent',
+      }}
+    >
+      {children}
+    </View>
+  );
+}
 
 export default function TabsLayout() {
   const tema = useTheme();
-  const { discreto, alternar } = useModoDiscreto();
+  const extra = coloresExtra(tema.dark);
 
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: tema.colors.surface },
+        headerStyle: { backgroundColor: tema.colors.background },
         headerTintColor: tema.colors.onSurface,
+        headerTitleAlign: 'center',
+        headerTitleStyle: { fontWeight: '800', fontSize: 22 },
         headerShadowVisible: false,
-        tabBarStyle: { backgroundColor: tema.colors.surface, borderTopColor: tema.colors.outlineVariant },
+        tabBarStyle: { backgroundColor: extra.barra, borderTopWidth: 0, height: 68, paddingTop: 6 },
+        tabBarLabelStyle: { fontSize: 12, marginTop: 2 },
         tabBarActiveTintColor: tema.colors.primary,
         tabBarInactiveTintColor: tema.colors.onSurfaceVariant,
         sceneStyle: { backgroundColor: tema.colors.background },
@@ -36,14 +60,12 @@ export default function TabsLayout() {
           headerTitle: 'Resumen',
           tabBarIcon: icono('home'),
           headerRight: () => (
-            <View style={{ flexDirection: 'row' }}>
-              <IconButton
-                icon={discreto ? 'eye-off' : 'eye'}
-                accessibilityLabel={discreto ? 'Mostrar montos' : 'Ocultar todos los montos'}
-                onPress={alternar}
-              />
-              <IconButton icon="cog" accessibilityLabel="Ajustes" onPress={() => router.push('/ajustes')} />
-            </View>
+            <IconButton
+              icon="cog-outline"
+              mode="outlined"
+              accessibilityLabel="Ajustes"
+              onPress={() => router.push('/ajustes')}
+            />
           ),
         }}
       />
@@ -56,6 +78,7 @@ export default function TabsLayout() {
           headerRight: () => (
             <IconButton
               icon="wallet-plus"
+              mode="outlined"
               accessibilityLabel="Nueva billetera"
               onPress={() => router.push('/billetera/nueva')}
             />

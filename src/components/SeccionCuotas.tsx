@@ -92,7 +92,7 @@ export function SeccionCuotas({ encabezado }: { encabezado: ReactNode }) {
           </>
         }
         renderItem={({ item: c }) => (
-          <Card mode="outlined" style={[styles.tarjeta, c.pendiente === 0 && styles.pagada]} onPress={() => router.push(`/cuota/${c.id}`)}>
+          <Card mode="contained" style={[styles.tarjeta, c.pendiente === 0 && styles.pagada]} onPress={() => router.push(`/cuota/${c.id}`)}>
             <Card.Title
               title={c.comercio}
               subtitle={

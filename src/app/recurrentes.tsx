@@ -2,11 +2,12 @@ import { router, Stack, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
-import { Avatar, FAB, List, Text, useTheme } from 'react-native-paper';
+import { FAB, List, Text, useTheme } from 'react-native-paper';
 
 import { listarRecurrentes, NOMBRE_FRECUENCIA, type Recurrente } from '../db/recurrentes';
 import { fechaSimpleLegible } from '../lib/fechas';
 import { formatearMonto } from '../lib/moneda';
+import { IconoCuadro } from '../components/IconoCuadro';
 
 export default function PantallaRecurrentes() {
   const db = useSQLiteContext();
@@ -40,7 +41,7 @@ export default function PantallaRecurrentes() {
             style={!r.activo && styles.inactivo}
             onPress={() => router.push(r.tipo === 'APORTE_META' ? `/meta/${r.meta_id}` : `/recurrente/${r.id}`)}
             left={() => (
-              <Avatar.Icon size={36} icon={r.categoria_icono} color="#FFFFFF" style={[styles.icono, { backgroundColor: r.categoria_color }]} />
+              <View style={styles.icono}><IconoCuadro icono={r.categoria_icono} color={r.categoria_color} tamano={40} /></View>
             )}
           />
         )}

@@ -2,9 +2,10 @@ import { router, Stack, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, SectionList, StyleSheet, View } from 'react-native';
-import { Avatar, FAB, List, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { FAB, List, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { listarCategorias, type Categoria, type TipoCategoria } from '../db/categorias';
+import { IconoCuadro } from '../components/IconoCuadro';
 
 export default function PantallaCategorias() {
   const db = useSQLiteContext();
@@ -54,7 +55,7 @@ export default function PantallaCategorias() {
             onPress={() => router.push(`/categoria/${item.id}`)}
             style={item.archivada && styles.archivada}
             left={() => (
-              <Avatar.Icon size={36} icon={item.icono} color="#FFFFFF" style={[styles.icono, { backgroundColor: item.color_hex }]} />
+              <View style={styles.icono}><IconoCuadro icono={item.icono} color={item.color_hex} tamano={40} /></View>
             )}
             right={(p) => <List.Icon {...p} icon="chevron-right" />}
           />

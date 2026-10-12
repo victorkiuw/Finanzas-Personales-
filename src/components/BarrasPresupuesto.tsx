@@ -1,8 +1,9 @@
 import { StyleSheet, View } from 'react-native';
-import { Avatar, Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from 'react-native-paper';
 
 import type { EstadoPresupuesto } from '../db/presupuestos';
 import { formatearMonto } from '../lib/moneda';
+import { IconoCuadro } from './IconoCuadro';
 
 // Colores de estado con icono y texto (nunca solo color).
 const AMBAR_CLARO = '#B26A00';
@@ -19,7 +20,7 @@ export function BarrasPresupuesto({ estados }: { estados: EstadoPresupuesto[] })
         const resto = e.monto - e.gastado;
         return (
           <View key={e.categoria_id} style={styles.fila}>
-            <Avatar.Icon size={32} icon={e.icono} color="#FFFFFF" style={{ backgroundColor: e.color }} />
+            <IconoCuadro icono={e.icono} color={e.color} tamano={36} />
             <View style={styles.flex}>
               <View style={styles.textos}>
                 <Text variant="bodyMedium" numberOfLines={1} style={styles.flex}>

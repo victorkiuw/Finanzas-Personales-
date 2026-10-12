@@ -76,7 +76,7 @@ export function AporteAutomatico({ meta, onCambio }: { meta: Meta; onCambio: () 
 
   if (!editando) {
     return (
-      <Card mode="outlined" style={styles.tarjeta}>
+      <Card mode="contained" style={styles.tarjeta}>
         <Card.Content style={styles.bloque}>
           <Text variant="labelLarge">Aporte automático</Text>
           {aporte ? (
@@ -104,7 +104,7 @@ export function AporteAutomatico({ meta, onCambio }: { meta: Meta; onCambio: () 
   }
 
   return (
-    <Card mode="outlined" style={styles.tarjeta}>
+    <Card mode="contained" style={styles.tarjeta}>
       <Card.Content style={styles.bloque}>
         <Text variant="labelLarge">Aporte automático</Text>
         <TextInput

@@ -2,12 +2,13 @@ import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Avatar, Button, Card, IconButton, Text, useTheme } from 'react-native-paper';
+import { Button, Card, IconButton, Text, useTheme } from 'react-native-paper';
 
 import { ListaMovimientos } from '../../components/ListaMovimientos';
 import { obtenerBilletera, type Billetera } from '../../db/billeteras';
 import { listarDeudas, type Deuda } from '../../db/deudas';
 import { formatearMonto, INFO_MONEDA } from '../../lib/moneda';
+import { IconoCuadro } from '../../components/IconoCuadro';
 
 export default function DetalleBilletera() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,12 +40,7 @@ export default function DetalleBilletera() {
     <View>
       <Card mode="contained" style={styles.tarjeta}>
         <Card.Content style={styles.resumen}>
-          <Avatar.Icon
-            size={48}
-            icon={billetera.icono}
-            color="#FFFFFF"
-            style={{ backgroundColor: billetera.color_hex }}
-          />
+          <IconoCuadro icono={billetera.icono} color={billetera.color_hex} tamano={52} />
           <View style={styles.flex}>
             <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
               {`Saldo · ${INFO_MONEDA[billetera.moneda].nombre}${billetera.archivada ? ' · Archivada' : ''}`}

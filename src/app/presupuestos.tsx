@@ -2,12 +2,13 @@ import { Stack, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
-import { Avatar, Button, Dialog, HelperText, List, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Dialog, HelperText, List, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { ErrorValidacion } from '../db/billeteras';
 import { listarCategorias, type Categoria } from '../db/categorias';
 import { eliminarPresupuesto, guardarPresupuesto, listarPresupuestos, type Presupuesto } from '../db/presupuestos';
 import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto, type Moneda } from '../lib/moneda';
+import { IconoCuadro } from '../components/IconoCuadro';
 
 export default function PantallaPresupuestos() {
   const db = useSQLiteContext();
@@ -83,7 +84,7 @@ export default function PantallaPresupuestos() {
               description={p ? `${formatearMonto(p.monto, p.moneda)} al mes` : 'Sin presupuesto'}
               onPress={() => abrir(item)}
               left={() => (
-                <Avatar.Icon size={36} icon={item.icono} color="#FFFFFF" style={[styles.icono, { backgroundColor: item.color_hex }]} />
+                <View style={styles.icono}><IconoCuadro icono={item.icono} color={item.color_hex} tamano={40} /></View>
               )}
               right={(pr) => <List.Icon {...pr} icon={p ? 'pencil' : 'plus'} />}
             />

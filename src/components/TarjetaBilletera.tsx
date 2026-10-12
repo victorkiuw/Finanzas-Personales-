@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Avatar, Card, IconButton, Text, useTheme } from 'react-native-paper';
+import { Card, IconButton, Text, useTheme } from 'react-native-paper';
 
 import type { Billetera } from '../db/billeteras';
 import { formatearMonto, INFO_MONEDA } from '../lib/moneda';
+import { IconoCuadro } from './IconoCuadro';
 
 interface Props {
   billetera: Billetera;
@@ -27,12 +28,7 @@ export function TarjetaBilletera({ billetera, deOtros, onPress }: Props) {
       accessibilityLabel={`${billetera.nombre}, ${oculta ? 'saldo oculto' : formatearMonto(billetera.saldo, billetera.moneda)}`}
     >
       <Card.Content style={styles.contenido}>
-        <Avatar.Icon
-          size={44}
-          icon={billetera.icono}
-          color="#FFFFFF"
-          style={{ backgroundColor: billetera.color_hex }}
-        />
+        <IconoCuadro icono={billetera.icono} color={billetera.color_hex} tamano={46} />
         <View style={styles.textos}>
           <Text variant="titleMedium" numberOfLines={1}>
             {billetera.nombre}

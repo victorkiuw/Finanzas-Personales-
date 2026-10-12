@@ -127,7 +127,7 @@ export default function PantallaTasas() {
         />
         {monto === null && montoTexto.trim() !== '' && <HelperText type="error">Número no válido</HelperText>}
 
-        <Card mode="outlined">
+        <Card mode="contained">
           <Card.Content style={styles.resultado}>
             <Text variant="labelLarge" style={{ color: tema.colors.onSurfaceVariant }}>
               Equivale a
@@ -217,7 +217,7 @@ export default function PantallaTasas() {
             </View>
           </Card.Content>
         </Card>
-        <Card mode="outlined">
+        <Card mode="contained">
           <Card.Title title="Historial" subtitle="Desliza el dedo sobre el gráfico para ver cada día" />
           <Card.Content style={styles.historial}>
             <View style={styles.chips}>

@@ -17,6 +17,13 @@ import type { Cambio } from '../lib/conversion';
 import { revisarAlertasTasa } from '../lib/avisos';
 import { esMoneda, type Moneda } from '../lib/moneda';
 
+/**
+ * Cómo se ven los totales (un solo selector, como en Rial): en bolívares, en
+ * dólares a tasa BCV, en USDT a tasa USDT o en euros.
+ */
+export type Vista = 'BS' | 'USD' | 'USDT' | 'EUR';
+export const VISTAS: Vista[] = ['BS', 'USD', 'USDT', 'EUR'];
+
 interface ContextoTasas {
   tasas: Tasas;
   actualizando: boolean;
@@ -33,6 +40,9 @@ interface ContextoTasas {
   /** Moneda en la que se muestra el total consolidado. */
   monedaBase: Moneda;
   cambiarMonedaBase: (m: Moneda) => void;
+  vista: Vista;
+  /** Cambia moneda y tasa a la vez: USD → BCV, USDT → tasa USDT, EUR → euro BCV; Bs. conserva la tasa. */
+  cambiarVista: (v: Vista) => void;
   /** Cambia cada vez que se actualiza el historial de tasas (para recalcular reportes). */
   versionHistorial: number;
   /** Tasa propia (la de tu banco o casa de cambio), en Bs. por dólar. */
@@ -146,6 +156,17 @@ export function TasasProvider({ children }: { children: ReactNode }) {
     [db],
   );
 
+  const vista: Vista =
+    monedaBase === 'BS' ? 'BS' : monedaBase === 'EUR' ? 'EUR' : monedaBase === 'USDT' || referencia === 'PARALELO' ? 'USDT' : 'USD';
+  const cambiarVista = useCallback(
+    (v: Vista) => {
+      cambiarMonedaBase(v);
+      if (v === 'USD' || v === 'EUR') cambiarReferencia('BCV');
+      if (v === 'USDT') cambiarReferencia('PARALELO');
+    },
+    [cambiarMonedaBase, cambiarReferencia],
+  );
+
   return (
     <Contexto.Provider
       value={{
@@ -159,6 +180,8 @@ export function TasasProvider({ children }: { children: ReactNode }) {
         cambio: cambioDe(tasas, referencia),
         monedaBase,
         cambiarMonedaBase,
+        vista,
+        cambiarVista,
         versionHistorial,
         propia,
         guardarPropia,

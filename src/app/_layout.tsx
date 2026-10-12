@@ -47,8 +47,9 @@ export default function RootLayout() {
                   // Al cambiar el modo discreto se vuelve a dibujar todo con los montos ocultos o visibles.
                   key={discreto ? 'discreto' : 'normal'}
                   screenOptions={{
-                    headerStyle: { backgroundColor: tema.colors.surface },
+                    headerStyle: { backgroundColor: tema.colors.background },
                     headerTintColor: tema.colors.onSurface,
+                    headerTitleStyle: { fontWeight: '700' },
                     headerShadowVisible: false,
                     contentStyle: { backgroundColor: tema.colors.background },
                   }}

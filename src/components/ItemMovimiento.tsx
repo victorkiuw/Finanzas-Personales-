@@ -1,12 +1,15 @@
 import { StyleSheet, View } from 'react-native';
-import { Avatar, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { Text, TouchableRipple, useTheme } from 'react-native-paper';
 
 import { efectoEnBilletera, TIPOS_DEUDA, TIPOS_ENTRADA, type Movimiento } from '../db/movimientos';
 import { formatearHora } from '../lib/fechas';
 import { formatearMonto } from '../lib/moneda';
+import { IconoCuadro } from './IconoCuadro';
 
 export const COLOR_INGRESO = '#2E7D32';
-export const COLOR_INGRESO_OSCURO = '#81C784';
+export const COLOR_INGRESO_OSCURO = '#4ADE80';
+export const COLOR_GASTO = '#C62828';
+export const COLOR_GASTO_OSCURO = '#F87171';
 
 interface Props {
   movimiento: Movimiento;
@@ -43,6 +46,7 @@ function titulo(m: Movimiento): string {
 export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: Props) {
   const tema = useTheme();
   const verde = tema.dark ? COLOR_INGRESO_OSCURO : COLOR_INGRESO;
+  const rojo = tema.dark ? COLOR_GASTO_OSCURO : COLOR_GASTO;
   const esTransferencia = m.tipo === 'TRANSFERENCIA';
 
   let montoTexto: string;
@@ -51,12 +55,12 @@ export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: 
   if (enMeta && m.meta_moneda) {
     const entra = m.tipo === 'APORTE_META';
     montoTexto = `${entra ? '+' : '-'}${formatearMonto(m.monto_destino ?? 0, m.meta_moneda)}`;
-    if (entra) color = verde;
+    color = entra ? verde : rojo;
   } else if (billeteraId !== undefined) {
     const efecto = efectoEnBilletera(m, billeteraId);
     const moneda = m.billetera_destino_id === billeteraId && esTransferencia ? m.destino_moneda! : m.origen_moneda;
     montoTexto = `${efecto > 0 ? '+' : ''}${formatearMonto(efecto, moneda)}`;
-    if (efecto > 0) color = verde;
+    color = efecto > 0 ? verde : efecto < 0 ? rojo : color;
   } else if (esTransferencia) {
     montoTexto = formatearMonto(m.monto, m.origen_moneda);
     if (m.destino_moneda !== m.origen_moneda) {
@@ -65,7 +69,7 @@ export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: 
   } else {
     const entra = TIPOS_ENTRADA.includes(m.tipo);
     montoTexto = `${entra ? '+' : '-'}${formatearMonto(m.monto, m.origen_moneda)}`;
-    if (entra) color = verde;
+    color = entra ? verde : rojo;
   }
 
   const subtitulo = [
@@ -80,11 +84,9 @@ export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: 
   return (
     <TouchableRipple onPress={onPress} accessibilityRole="button">
       <View style={styles.fila}>
-        <Avatar.Icon
-          size={40}
-          icon={esTransferencia ? 'swap-horizontal' : TIPOS_DEUDA.includes(m.tipo) ? 'handshake' : (m.categoria_icono ?? 'piggy-bank')}
-          color="#FFFFFF"
-          style={{ backgroundColor: esTransferencia ? tema.colors.secondary : (m.categoria_color ?? tema.colors.tertiary) }}
+        <IconoCuadro
+          icono={esTransferencia ? 'swap-horizontal' : TIPOS_DEUDA.includes(m.tipo) ? 'handshake' : (m.categoria_icono ?? 'piggy-bank')}
+          color={esTransferencia ? '#60A5FA' : TIPOS_DEUDA.includes(m.tipo) ? '#F59E0B' : (m.categoria_color ?? '#9CA3AF')}
         />
         <View style={styles.textos}>
           <Text variant="bodyLarge" numberOfLines={1}>
@@ -110,7 +112,7 @@ export function ItemMovimiento({ movimiento: m, billeteraId, enMeta, onPress }: 
 }
 
 const styles = StyleSheet.create({
-  fila: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  fila: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 12 },
   textos: { flex: 1 },
   montos: { alignItems: 'flex-end' },
   monto: { fontVariant: ['tabular-nums'], fontWeight: '600' },

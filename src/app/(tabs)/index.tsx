@@ -4,16 +4,20 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
+import { AccesosRapidos } from '../../components/AccesosRapidos';
 import { AvisosDetectados } from '../../components/AvisosDetectados';
 import { CintaTasas } from '../../components/CintaTasas';
 import { DialogoDictado } from '../../components/DialogoDictado';
 import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
 import { GastosDeCategoria } from '../../components/GastosDeCategoria';
 import { GraficoLineas } from '../../components/GraficoLineas';
+import { IconoCuadro } from '../../components/IconoCuadro';
 import { BarrasCategorias, ColumnasMensuales, coloresSeries } from '../../components/graficos';
 import { ItemMovimiento } from '../../components/ItemMovimiento';
 import { MovimientosRapidos } from '../../components/MovimientosRapidos';
 import { ResumenSaldo } from '../../components/ResumenSaldo';
+import { SelectorMes } from '../../components/SelectorMes';
+import { TarjetasFlujo } from '../../components/TarjetasFlujo';
 import { TarjetaPendientes } from '../../components/TarjetaPendientes';
 import { useTasas } from '../../components/TasasProvider';
 import { listarBilleteras, type Billetera } from '../../db/billeteras';
@@ -37,7 +41,7 @@ import {
 } from '../../db/reportes';
 import { listarHistorial } from '../../db/tasas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
-import { claveDia, nombreMes, rangoMes } from '../../lib/fechas';
+import { claveDia, rangoMes } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
 import { periodos, type Escala } from '../../lib/periodos';
 import { DIAS_AVISO_EXPORTAR, diasSinExportar } from '../../lib/respaldoAuto';
@@ -75,6 +79,8 @@ interface Datos {
   patrimonio: PuntoPatrimonio[];
   /** Días desde la última copia exportada fuera del teléfono (null = nunca). */
   sinExportar: number | null;
+  /** Disponible al cierre del mes pasado (para "vs mes pasado"). */
+  anterior: number | null;
 }
 
 export default function PantallaInicio() {
@@ -123,6 +129,8 @@ export default function PantallaInicio() {
     const conversor = new Conversor(historial, cambio.dolar, historialEuro, cambio.euro);
     const puntos = await disponibleAl(db, cortes.map((p) => p.hasta), conversor, monedaBase);
     const patrimonio = puntos.map((p, i) => ({ ...p, mes: cortes[i].larga }));
+    const hoy = new Date();
+    const [cierre] = await disponibleAl(db, [new Date(hoy.getFullYear(), hoy.getMonth(), 1)], conversor, monedaBase);
     const [sinExportar, plantillas, devaluacion, deudas] = await Promise.all([
       diasSinExportar(db),
       listarPlantillas(db),
@@ -147,6 +155,7 @@ export default function PantallaInicio() {
       devaluacion,
       patrimonio,
       sinExportar,
+      anterior: cierre && !cierre.incompleto ? cierre.total : null,
     });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
   }, [db, mes, fin, escala, referencia, versionHistorial, monedaBase, cambio.dolar, cambio.euro]);
@@ -197,8 +206,6 @@ export default function PantallaInicio() {
 
   const { resumen, porMes, etiquetas, titulos, presupuestos } = reporte;
   const colores = coloresSeries(tema.dark);
-  const esMesActual = claveMes(mes) === claveMes(new Date());
-  const cambiarMes = (delta: number) => setMes(new Date(mes.getFullYear(), mes.getMonth() + delta, 1));
 
   return (
     <View style={styles.flex}>
@@ -217,7 +224,16 @@ export default function PantallaInicio() {
             />
           </Card>
         )}
-        <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} deudas={datos.deudas} />
+        <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} deudas={datos.deudas} anterior={datos.anterior} />
+
+        <AccesosRapidos
+          accesos={[
+            { icono: 'arrow-up', texto: 'Gasto', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'GASTO' } }) },
+            { icono: 'arrow-down', texto: 'Ingreso', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'INGRESO' } }) },
+            { icono: 'swap-horizontal', texto: 'Transferir', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'TRANSFERENCIA' } }) },
+            { icono: 'microphone', texto: 'Dictar', onPress: () => setDictando(true) },
+          ]}
+        />
 
         {/* Billeteras en cuadrícula de dos columnas: se ven todas sin deslizar. */}
         <View style={styles.carrusel}>
@@ -233,7 +249,7 @@ export default function PantallaInicio() {
                 accessibilityLabel={oculta ? `${b.nombre}, saldo oculto` : `${b.nombre}, ${formatearMonto(b.saldo, b.moneda)}`}
               >
                 <View style={styles.filaMini}>
-                  <Avatar.Icon size={24} icon={b.icono} color="#FFFFFF" style={{ backgroundColor: b.color_hex }} />
+                  <IconoCuadro icono={b.icono} color={b.color_hex} tamano={32} />
                   <Text variant="labelLarge" numberOfLines={1} style={styles.flex}>
                     {b.nombre}
                   </Text>
@@ -277,7 +293,7 @@ export default function PantallaInicio() {
             accessibilityLabel="Agregar billetera"
           >
             <View style={styles.filaMini}>
-              <Avatar.Icon size={24} icon="plus" />
+              <IconoCuadro icono="plus" color={tema.colors.primary} tamano={32} />
               <Text variant="labelLarge">Agregar billetera</Text>
             </View>
           </Pressable>
@@ -286,43 +302,15 @@ export default function PantallaInicio() {
         <MovimientosRapidos plantillas={datos.plantillas} onCambio={() => cargar().catch(() => {})} />
 
         <View style={styles.seccion}>
-          <View style={styles.selectorMes}>
-            <IconButton icon="chevron-left" onPress={() => cambiarMes(-1)} accessibilityLabel="Mes anterior" />
-            <Text variant="titleMedium" style={styles.mes}>
-              {nombreMes(mes)}
-            </Text>
-            <IconButton
-              icon="chevron-right"
-              onPress={() => cambiarMes(1)}
-              disabled={esMesActual}
-              accessibilityLabel="Mes siguiente"
-            />
-          </View>
-
-          <View style={styles.kpis}>
-            <Kpi titulo="Ingresos" valor={formatearMonto(resumen.ingresos, monedaBase)} marca={colores.ingresos} />
-            <Kpi titulo="Gastos" valor={formatearMonto(resumen.gastos, monedaBase)} marca={colores.gastos} />
-          </View>
-          <Card mode="contained">
-            <Card.Content style={styles.balance}>
-              <Text variant="labelLarge" style={{ color: tema.colors.onSurfaceVariant }}>
-                Balance neto del mes
-              </Text>
-              <Text
-                variant="headlineSmall"
-                style={[styles.cifra, styles.negrita, resumen.balance < 0 && { color: tema.colors.error }]}
-              >
-                {`${resumen.balance > 0 ? '+' : ''}${formatearMonto(resumen.balance, monedaBase)}`}
-              </Text>
-            </Card.Content>
-          </Card>
+          <SelectorMes mes={mes} onCambio={setMes} />
+          <TarjetasFlujo ingresos={resumen.ingresos} gastos={resumen.gastos} moneda={monedaBase} />
           <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
-            {`Montos en ${monedaBase === 'BS' ? 'bolívares' : 'dólares'}, cada movimiento convertido con la tasa ${NOMBRE_PAR[referencia]} de su día. No incluye transferencias ni metas.`}
+            {`Montos en ${NOMBRE_MONEDA_BASE[monedaBase]}, cada movimiento convertido con la tasa ${NOMBRE_PAR[referencia]} de su día. No incluye transferencias ni metas.`}
             {resumen.incompleto ? ' Faltan tasas para convertir algunos movimientos en Bs.' : ''}
           </Text>
 
           {datos.devaluacion.perdida >= 50 && (
-            <Card mode="outlined">
+            <Card mode="contained">
               <Card.Title title="Devaluación del mes" left={(p) => <Avatar.Icon {...p} icon="trending-down" />} />
               <Card.Content style={styles.balance}>
                 <Text variant="bodyMedium">
@@ -336,7 +324,7 @@ export default function PantallaInicio() {
             </Card>
           )}
 
-          <Card mode="outlined">
+          <Card mode="contained">
             <Card.Title
               title="Presupuestos del mes"
               right={() => <Button onPress={() => router.push('/presupuestos')}>{presupuestos.length ? 'Editar' : 'Crear'}</Button>}
@@ -352,7 +340,7 @@ export default function PantallaInicio() {
             </Card.Content>
           </Card>
 
-          <Card mode="outlined">
+          <Card mode="contained">
             <Card.Title title="Gastos por categoría" subtitle="Toca una para ver sus gastos" />
             <Card.Content>
               <BarrasCategorias
@@ -373,7 +361,7 @@ export default function PantallaInicio() {
             ]}
           />
 
-          <Card mode="outlined">
+          <Card mode="contained">
             <Card.Title
               title="Ingresos vs. gastos"
               subtitle={`${TEXTO_COLUMNAS[escala]} · toca una columna para ver sus cifras`}
@@ -390,7 +378,7 @@ export default function PantallaInicio() {
             </Card.Content>
           </Card>
 
-          <Card mode="outlined">
+          <Card mode="contained">
             <Card.Title
               title="Evolución de lo disponible"
               subtitle={`${TEXTO_LINEA[escala]}, sin metas, billeteras aparte ni dinero de otros`}
@@ -406,7 +394,7 @@ export default function PantallaInicio() {
             </Card.Content>
           </Card>
 
-          <Card mode="outlined">
+          <Card mode="contained">
             <Card.Title title="Movimientos recientes" />
             {datos.recientes.length === 0 ? (
               <Card.Content>
@@ -425,31 +413,18 @@ export default function PantallaInicio() {
           </Card>
         </View>
       </ScrollView>
-      <FAB icon="microphone" size="small" accessibilityLabel="Dictar un movimiento" style={styles.fabVoz} onPress={() => setDictando(true)} />
-      <FAB icon="plus" label="Movimiento" style={styles.fab} onPress={() => router.push('/movimiento/nuevo')} />
+      <FAB icon="plus" accessibilityLabel="Nuevo movimiento" style={styles.fab} onPress={() => router.push('/movimiento/nuevo')} />
       <DialogoDictado visible={dictando} onCerrar={() => setDictando(false)} />
     </View>
   );
 }
 
-function Kpi({ titulo, valor, marca }: { titulo: string; valor: string; marca: string }) {
-  const tema = useTheme();
-  return (
-    <Card mode="contained" style={styles.flex}>
-      <Card.Content style={styles.kpi}>
-        <View style={styles.filaMini}>
-          <View style={[styles.muestra, { backgroundColor: marca }]} />
-          <Text variant="labelLarge" style={{ color: tema.colors.onSurfaceVariant }}>
-            {titulo}
-          </Text>
-        </View>
-        <Text variant="titleMedium" style={[styles.cifra, styles.negrita]} numberOfLines={1} adjustsFontSizeToFit>
-          {valor}
-        </Text>
-      </Card.Content>
-    </Card>
-  );
-}
+const NOMBRE_MONEDA_BASE: Record<string, string> = {
+  BS: 'bolívares',
+  USD: 'dólares',
+  USDT: 'USDT',
+  EUR: 'euros',
+};
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
@@ -458,7 +433,7 @@ const styles = StyleSheet.create({
   bienvenida: { flex: 1, padding: 24, gap: 16, justifyContent: 'center' },
   centrado: { textAlign: 'center' },
   carrusel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
-  miniTarjeta: { flexGrow: 1, flexBasis: '45%', borderRadius: 12, padding: 12, gap: 6 },
+  miniTarjeta: { flexGrow: 1, flexBasis: '45%', borderRadius: 22, padding: 14, gap: 8 },
   filaMini: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ojo: { margin: -8 },
   nuevaBilletera: { borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center' },
@@ -472,6 +447,5 @@ const styles = StyleSheet.create({
   kpi: { gap: 4 },
   muestra: { width: 10, height: 10, borderRadius: 2 },
   balance: { gap: 2 },
-  fab: { position: 'absolute', right: 16, bottom: 16 },
-  fabVoz: { position: 'absolute', right: 20, bottom: 88 },
+  fab: { position: 'absolute', right: 16, bottom: 16, borderRadius: 999 },
 });
