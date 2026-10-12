@@ -22,16 +22,54 @@ export interface FilaReporte {
   categoria_color: string;
 }
 
-export async function filasDeReporte(db: BaseDatos, desde: string, hasta: string): Promise<FilaReporte[]> {
+export async function filasDeReporte(
+  db: BaseDatos,
+  desde: string,
+  hasta: string,
+  filtro: { billeteraId?: number; categoriaId?: number; tipo?: 'GASTO' | 'INGRESO' } = {},
+): Promise<FilaReporte[]> {
+  const extra: string[] = [];
+  const params: (string | number)[] = [desde, hasta];
+  if (filtro.billeteraId !== undefined) {
+    extra.push('t.billetera_origen_id = ?');
+    params.push(filtro.billeteraId);
+  }
+  if (filtro.categoriaId !== undefined) {
+    extra.push('t.categoria_id = ?');
+    params.push(filtro.categoriaId);
+  }
+  if (filtro.tipo) {
+    extra.push('t.tipo = ?');
+    params.push(filtro.tipo);
+  }
   return db.getAllAsync<FilaReporte>(
     `SELECT t.fecha, t.tipo, t.monto, o.moneda, t.categoria_id,
        c.nombre AS categoria_nombre, c.icono AS categoria_icono, c.color_hex AS categoria_color
      FROM transacciones t
      JOIN billeteras o ON o.id = t.billetera_origen_id
      JOIN categorias c ON c.id = t.categoria_id
-     WHERE t.tipo IN ('GASTO', 'INGRESO') AND t.fecha >= ? AND t.fecha < ?`,
-    [desde, hasta],
+     WHERE t.tipo IN ('GASTO', 'INGRESO') AND t.fecha >= ? AND t.fecha < ?${extra.map((e) => ` AND ${e}`).join('')}`,
+    params,
   );
+}
+
+/** Ingresos y gastos de cada día ("AAAA-MM-DD" local), en la moneda base. */
+export function totalesPorDia(
+  filas: FilaReporte[],
+  conversor: Conversor,
+  base: Moneda,
+): Map<string, { ingresos: number; gastos: number }> {
+  const porDia = new Map<string, { ingresos: number; gastos: number }>();
+  for (const f of filas) {
+    const monto = conversor.aBase(f.monto, f.moneda, base, f.fecha);
+    if (monto === null) continue;
+    const dia = claveDia(f.fecha);
+    const t = porDia.get(dia) ?? { ingresos: 0, gastos: 0 };
+    if (f.tipo === 'INGRESO') t.ingresos += monto;
+    else t.gastos += monto;
+    porDia.set(dia, t);
+  }
+  return porDia;
 }
 
 type Historial = { dia: string; tasa: number }[];

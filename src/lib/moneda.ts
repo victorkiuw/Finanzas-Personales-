@@ -115,3 +115,12 @@ export function centimosATexto(centimos: number): string {
   if (decimales === 0) return `${signo}${entero}`;
   return `${signo}${entero},${decimales.toString().padStart(2, '0')}`;
 }
+
+/** Monto corto (sin moneda) para espacios pequeños como el calendario: 850, 1,2k, 3,4M. */
+export function montoCompacto(centimos: number): string {
+  const v = Math.abs(centimos) / 100;
+  const corto = (x: number, sufijo: string) => `${x.toFixed(1).replace(/\.0$/, '').replace('.', ',')}${sufijo}`;
+  if (v >= 1_000_000) return corto(v / 1_000_000, 'M');
+  if (v >= 1_000) return corto(v / 1_000, 'k');
+  return String(Math.round(v));
+}
