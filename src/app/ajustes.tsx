@@ -159,6 +159,24 @@ export default function PantallaAjustes() {
     <ScrollView>
       <Stack.Screen options={{ title: 'Ajustes' }} />
       <List.Section>
+        <List.Subheader>Herramientas</List.Subheader>
+        {(
+          [
+            ['Lo que viene', 'Pagos, cobros, cuotas y metas por fecha', 'calendar-clock', '/proximos'],
+            ['¿Me alcanza?', 'Cuánto es un precio en cada moneda y cuánto te queda', 'cash-check', '/me-alcanza'],
+            ['Retos de ahorro', 'Racha de días sin gastar y reto de 52 semanas', 'fire', '/retos'],
+            ['Etiquetas', 'Totales de #viaje, #moto… escritas en las notas', 'pound', '/etiquetas'],
+          ] as const
+        ).map(([titulo, descripcion, icono, ruta]) => (
+          <List.Item
+            key={ruta}
+            title={titulo}
+            description={descripcion}
+            left={(p) => <List.Icon {...p} icon={icono} />}
+            right={(p) => <List.Icon {...p} icon="chevron-right" />}
+            onPress={() => router.push(ruta)}
+          />
+        ))}
         <List.Subheader>Personalizar</List.Subheader>
         <List.Item
           title="Personalizar Inicio"

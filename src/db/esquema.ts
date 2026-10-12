@@ -418,6 +418,17 @@ const MIGRACIONES: (string | Migracion)[] = [
   ALTER TABLE categorias ADD COLUMN fija INTEGER NOT NULL DEFAULT 0 CHECK (fija IN (0, 1));
   UPDATE categorias SET fija = 1 WHERE tipo = 'GASTO' AND nombre IN ('Hogar', 'Servicios');
   `,
+  // v16: lista de deseos (cosas que quiero comprar).
+  `
+  CREATE TABLE deseos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    precio INTEGER NOT NULL CHECK (precio > 0),
+    moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS', 'USDT', 'EUR')),
+    comprado INTEGER NOT NULL DEFAULT 0 CHECK (comprado IN (0, 1)),
+    creado_en TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

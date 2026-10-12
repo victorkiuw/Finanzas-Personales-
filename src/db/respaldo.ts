@@ -20,6 +20,7 @@ const TABLAS = [
   'transacciones',
   'recurrentes',
   'plantillas',
+  'deseos',
   'tasas_cache',
   'preferencias',
 ] as const;

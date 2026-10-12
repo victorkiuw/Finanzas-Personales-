@@ -5,6 +5,7 @@ import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, FAB, List, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { SeccionCuotas } from '../../components/SeccionCuotas';
+import { SeccionDeseos } from '../../components/SeccionDeseos';
 import { TarjetaDeuda } from '../../components/TarjetaDeuda';
 import { TarjetaMeta } from '../../components/TarjetaMeta';
 import { useTasas } from '../../components/TasasProvider';
@@ -14,7 +15,7 @@ import { NOMBRE_PAR } from '../../lib/api-tasas';
 import { actualizarAvisosVencimientos } from '../../lib/avisos';
 import { formatearMonto } from '../../lib/moneda';
 
-type Seccion = 'metas' | 'deudas' | 'cuotas';
+type Seccion = 'metas' | 'deudas' | 'cuotas' | 'deseos';
 
 export default function PantallaAhorros() {
   const db = useSQLiteContext();
@@ -45,14 +46,16 @@ export default function PantallaAhorros() {
       value={seccion}
       onValueChange={(v) => setSeccion(v as Seccion)}
       buttons={[
-        { value: 'metas', label: 'Metas', icon: 'flag-checkered' },
-        { value: 'deudas', label: 'Deudas', icon: 'handshake' },
-        { value: 'cuotas', label: 'Cuotas', icon: 'cart-outline' },
+        { value: 'metas', label: 'Metas' },
+        { value: 'deudas', label: 'Deudas' },
+        { value: 'cuotas', label: 'Cuotas' },
+        { value: 'deseos', label: 'Deseos' },
       ]}
     />
   );
 
   if (seccion === 'cuotas') return <SeccionCuotas encabezado={selector} />;
+  if (seccion === 'deseos') return <SeccionDeseos encabezado={selector} />;
 
   if (seccion === 'deudas') {
     const abiertas = deudas.filter((d) => !d.cerrada && !d.ajeno);

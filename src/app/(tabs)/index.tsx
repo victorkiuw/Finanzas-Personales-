@@ -47,9 +47,12 @@ import {
 } from '../../db/reportes';
 import { listarHistorial } from '../../db/tasas';
 import { NOMBRE_PAR } from '../../lib/api-tasas';
-import { claveDia, rangoMes } from '../../lib/fechas';
+import { claveDia, fechaSimpleLegible, rangoMes } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
 import { fijosVariables, gastosHormiga, pronosticoMes } from '../../lib/analisis';
+import { cargarProximos, colorSentido, type Evento } from '../../lib/proximos';
+import { listarDeseos, type Deseo } from '../../db/deseos';
+import { diasConGasto, rachaSinGastar } from '../../db/retos';
 import { convertir, totalConsolidado } from '../../lib/conversion';
 import { periodos, type Escala } from '../../lib/periodos';
 import { CLAVE_SECCIONES, leerSecciones, SECCIONES_INICIO, type ClaveSeccion, type Seccion } from '../../lib/seccionesInicio';
@@ -91,6 +94,10 @@ interface Datos {
   sinExportar: number | null;
   /** Disponible al cierre del mes pasado (para "vs mes pasado"). */
   anterior: number | null;
+  /** Lo que viene en los próximos 14 días. */
+  proximos: Evento[];
+  racha: { actual: number; mejor: number };
+  deseos: Deseo[];
 }
 
 export default function PantallaInicio() {
@@ -163,6 +170,13 @@ export default function PantallaInicio() {
     const patrimonio = puntos.map((p, i) => ({ ...p, mes: cortes[i].larga }));
     const hoy = new Date();
     const [cierre] = await disponibleAl(db, [new Date(hoy.getFullYear(), hoy.getMonth(), 1)], conversor, monedaBase);
+    const inicioRacha = new Date();
+    inicioRacha.setDate(inicioRacha.getDate() - 120);
+    const [proximos, conGasto, deseos] = await Promise.all([
+      cargarProximos(db, 14),
+      diasConGasto(db, inicioRacha.toISOString()),
+      listarDeseos(db),
+    ]);
     const [sinExportar, plantillas, devaluacion, deudas] = await Promise.all([
       diasSinExportar(db),
       listarPlantillas(db),
@@ -189,6 +203,9 @@ export default function PantallaInicio() {
       patrimonio,
       sinExportar,
       anterior: cierre && !cierre.incompleto ? cierre.total : null,
+      proximos,
+      racha: rachaSinGastar(conGasto, inicioRacha),
+      deseos: deseos.filter((d) => !d.comprado),
     });
     // versionHistorial no se usa dentro, pero al cambiar (llegaron tasas nuevas) hay que recargar.
   }, [db, mes, fin, escala, referencia, versionHistorial, monedaBase, cambio.dolar, cambio.euro]);
@@ -263,6 +280,14 @@ export default function PantallaInicio() {
   const esMesActual = claveMes(mes) === claveMes(new Date());
   const pronostico = esMesActual && disponibleHoy !== null ? pronosticoMes(resumen.gastos, disponibleHoy) : null;
   const totalFijosVariables = fijos.fijos + fijos.variables;
+  // El primer deseo que ya se puede pagar con lo disponible.
+  const disponibleUsd = totalConsolidado(
+    datos.billeteras.filter((b) => !b.archivada && b.en_total).map((b) => ({ moneda: b.moneda, saldo: b.saldo - (ajenoPor.get(b.id) ?? 0) })),
+    'USD',
+    cambio,
+  );
+  const deseoAlcanzable =
+    disponibleUsd !== null ? datos.deseos.find((d) => (convertir(d.precio, d.moneda, 'USD', cambio) ?? Infinity) <= disponibleUsd) : undefined;
   const colores = coloresSeries(tema.dark);
 
   // Cada sección de Inicio; se muestran en el orden y con la visibilidad que eligió el usuario.
@@ -274,6 +299,7 @@ export default function PantallaInicio() {
               { icono: 'arrow-down', texto: 'Ingreso', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'INGRESO' } }) },
               { icono: 'swap-horizontal', texto: 'Transferir', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'TRANSFERENCIA' } }) },
               { icono: 'microphone', texto: 'Dictar', onPress: () => setDictando(true) },
+            { icono: 'cash-check', texto: '¿Me alcanza?', onPress: () => router.push('/me-alcanza') },
             ]}
           />
     ),
@@ -396,6 +422,42 @@ export default function PantallaInicio() {
         </Card>
       </View>
     ) : null,
+    proximos:
+      datos.proximos.length > 0 ? (
+        <View style={styles.seccion}>
+          <Card mode="contained" onPress={() => router.push('/proximos')}>
+            <Card.Title
+              title="Lo que viene"
+              subtitle="Próximos 14 días · toca para ver más"
+              left={(p) => <Avatar.Icon {...p} icon="calendar-clock" />}
+            />
+            <Card.Content style={styles.balance}>
+              {datos.proximos.slice(0, 4).map((e, i) => (
+                <View key={i} style={styles.filaFijos}>
+                  <Text variant="bodyMedium" numberOfLines={1} style={styles.flex}>
+                    {`${e.fecha === claveDia(new Date().toISOString()) ? 'Hoy' : fechaSimpleLegible(e.fecha)} · ${e.titulo}`}
+                  </Text>
+                  <Text variant="bodyMedium" style={[styles.cifra, { color: colorSentido(e.sentido, tema.dark) }]}>
+                    {`${e.sentido === 'entra' ? '+' : e.sentido === 'sale' ? '-' : ''}${formatearMonto(e.monto, e.moneda)}`}
+                  </Text>
+                </View>
+              ))}
+            </Card.Content>
+          </Card>
+        </View>
+      ) : null,
+    retos: (
+      <View style={styles.seccion}>
+        <Card mode="contained" onPress={() => router.push('/retos')}>
+          <Card.Title
+            title={datos.racha.actual > 0 ? `🔥 ${datos.racha.actual} ${datos.racha.actual === 1 ? 'día' : 'días'} sin gastar` : 'Racha sin gastar'}
+            subtitle={`Mejor racha: ${datos.racha.mejor} días · Retos de ahorro`}
+            left={(p) => <Avatar.Icon {...p} icon="fire" />}
+            right={(p) => <IconButton {...p} icon="chevron-right" onPress={() => router.push('/retos')} />}
+          />
+        </Card>
+      </View>
+    ),
     analisis:
       totalFijosVariables > 0 || hormiga.cantidad > 0 ? (
         <View style={styles.seccion}>
@@ -581,6 +643,19 @@ export default function PantallaInicio() {
               subtitleNumberOfLines={2}
               titleNumberOfLines={2}
               left={(p) => <Avatar.Icon {...p} icon="cloud-upload" />}
+            />
+          </Card>
+        )}
+        {deseoAlcanzable && (
+          <Card
+            mode="contained"
+            style={[styles.aviso, { backgroundColor: tema.colors.secondaryContainer }]}
+            onPress={() => router.navigate('/ahorros')}
+          >
+            <Card.Title
+              title={`🎉 ¡Ya te alcanza para ${deseoAlcanzable.nombre}!`}
+              subtitle="De tu lista de deseos · Ahorros → Deseos"
+              titleNumberOfLines={2}
             />
           </Card>
         )}
