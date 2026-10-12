@@ -87,7 +87,7 @@ test('la migración v9 (euros) reconstruye tablas sin perder datos, enlaces ni c
   assert.deepEqual(
     { ...banco, creada_en: undefined },
     { id: 1, nombre: 'Banco', moneda: 'BS', balance_inicial: 100000, icono: 'wallet', color_hex: '#2E7D32', archivada: 0, creada_en: undefined,
-      comision_porcentaje: 0.3, comision_minima: 1400, margen_cambio: 2, en_total: 1, favorita: 0 },
+      comision_porcentaje: 0.3, comision_minima: 1400, margen_cambio: 2, en_total: 1, favorita: 0, orden: 0 },
   );
   // Solo se borra la marca del histórico (para bajarlo con el euro); las demás preferencias quedan.
   assert.deepEqual(sql.prepare('SELECT clave FROM preferencias').all().map((f) => ({ ...f })), [{ clave: 'tasa_referencia' }]);

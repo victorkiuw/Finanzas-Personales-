@@ -148,3 +148,21 @@ test('favoritas: salen primero en la lista', async () => {
   const lista = await listarBilleteras(db);
   assert.deepEqual(lista.map((x) => [x.nombre, x.favorita]), [['B', true], ['A', false]]);
 });
+
+test('orden elegido arrastrando para billeteras y categorías', async () => {
+  const { crearBdMemoria } = await import('./bd-memoria');
+  const { crearBilletera, guardarOrdenBilleteras, listarBilleteras } = await import('../src/db/billeteras');
+  const { guardarOrdenCategorias, listarCategorias } = await import('../src/db/categorias');
+  const db = await crearBdMemoria();
+  const base = { icono: 'wallet', color_hex: '#000000', moneda: 'USD' as const, balance_inicial: 0 };
+  const a = await crearBilletera(db, { ...base, nombre: 'A' });
+  const b = await crearBilletera(db, { ...base, nombre: 'B' });
+  const c = await crearBilletera(db, { ...base, nombre: 'C' });
+  await guardarOrdenBilleteras(db, [c, a, b]);
+  assert.deepEqual((await listarBilleteras(db)).map((x) => x.nombre), ['C', 'A', 'B']);
+
+  const cats = await listarCategorias(db, 'GASTO');
+  const invertidas = [...cats].reverse();
+  await guardarOrdenCategorias(db, invertidas.map((x) => x.id));
+  assert.deepEqual((await listarCategorias(db, 'GASTO')).map((x) => x.id), invertidas.map((x) => x.id));
+});

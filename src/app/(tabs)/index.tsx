@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
@@ -49,6 +49,7 @@ import { NOMBRE_PAR } from '../../lib/api-tasas';
 import { claveDia, rangoMes } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
 import { periodos, type Escala } from '../../lib/periodos';
+import { CLAVE_SECCIONES, leerSecciones, SECCIONES_INICIO, type ClaveSeccion, type Seccion } from '../../lib/seccionesInicio';
 import { DIAS_AVISO_EXPORTAR, diasSinExportar } from '../../lib/respaldoAuto';
 import { actualizarWidget } from '../../widget/manejador';
 
@@ -119,6 +120,8 @@ export default function PantallaInicio() {
   const [dictando, setDictando] = useState(false);
   // La guía de bienvenida sale la primera vez (o cuando se pide desde Ajustes).
   const [guia, setGuia] = useState(false);
+  // Orden y visibilidad de las secciones (Personalizar Inicio).
+  const [secciones, setSecciones] = useState<Seccion[]>(SECCIONES_INICIO);
   const terminarGuia = () => {
     setGuia(false);
     guardarPreferencia(db, CLAVE_GUIA, '1').catch(() => {});
@@ -193,6 +196,9 @@ export default function PantallaInicio() {
       leerPreferencia(db, CLAVE_GUIA)
         .then((v) => setGuia(v === null))
         .catch(() => {});
+      leerPreferencia(db, CLAVE_SECCIONES)
+        .then((v) => setSecciones(leerSecciones(v)))
+        .catch(() => {});
       // Al salir de Inicio, los saldos guardados aparte se vuelven a ocultar.
       return () => setVisibles(new Set());
     }, [cargar, db]),
@@ -238,44 +244,20 @@ export default function PantallaInicio() {
   const { resumen, porMes, etiquetas, titulos, presupuestos } = reporte;
   const colores = coloresSeries(tema.dark);
 
-  return (
-    <View style={styles.flex}>
-      <ScrollView
-        contentContainerStyle={styles.contenido}
-        refreshControl={
-          <RefreshControl
-            refreshing={refrescando}
-            onRefresh={refrescar}
-            colors={[tema.colors.onPrimaryContainer]}
-            progressBackgroundColor={tema.colors.primaryContainer}
+  // Cada sección de Inicio; se muestran en el orden y con la visibilidad que eligió el usuario.
+  const bloques: Record<ClaveSeccion, ReactNode> = {
+    accesos: (
+          <AccesosRapidos
+            accesos={[
+              { icono: 'arrow-up', texto: 'Gasto', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'GASTO' } }) },
+              { icono: 'arrow-down', texto: 'Ingreso', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'INGRESO' } }) },
+              { icono: 'swap-horizontal', texto: 'Transferir', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'TRANSFERENCIA' } }) },
+              { icono: 'microphone', texto: 'Dictar', onPress: () => setDictando(true) },
+            ]}
           />
-        }
-      >
-        <CintaTasas />
-        <TarjetaPendientes pendientes={datos.pendientes} onCambio={() => cargar().catch(() => {})} />
-        <AvisosDetectados billeteras={datos.billeteras} />
-        {(datos.sinExportar === null || datos.sinExportar >= DIAS_AVISO_EXPORTAR) && datos.recientes.length > 0 && (
-          <Card mode="contained" style={[styles.aviso, { backgroundColor: tema.colors.tertiaryContainer }]} onPress={() => router.push('/ajustes')}>
-            <Card.Title
-              title={datos.sinExportar === null ? 'Aún no guardas una copia fuera del teléfono' : `Hace ${datos.sinExportar} días que no guardas una copia`}
-              subtitle="Toca para exportarla a Drive o WhatsApp"
-              subtitleNumberOfLines={2}
-              titleNumberOfLines={2}
-              left={(p) => <Avatar.Icon {...p} icon="cloud-upload" />}
-            />
-          </Card>
-        )}
-        <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} deudas={datos.deudas} anterior={datos.anterior} />
-
-        <AccesosRapidos
-          accesos={[
-            { icono: 'arrow-up', texto: 'Gasto', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'GASTO' } }) },
-            { icono: 'arrow-down', texto: 'Ingreso', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'INGRESO' } }) },
-            { icono: 'swap-horizontal', texto: 'Transferir', onPress: () => router.push({ pathname: '/movimiento/nuevo', params: { tipo: 'TRANSFERENCIA' } }) },
-            { icono: 'microphone', texto: 'Dictar', onPress: () => setDictando(true) },
-          ]}
-        />
-
+    ),
+    billeteras: (
+      <>
         {/* Billeteras en cuadrícula de dos columnas: se ven todas sin deslizar. */}
         <View style={styles.carrusel}>
           {datos.billeteras.map((b) => {
@@ -339,10 +321,13 @@ export default function PantallaInicio() {
             </View>
           </Pressable>
         </View>
-
-        <MovimientosRapidos plantillas={datos.plantillas} onCambio={() => cargar().catch(() => {})} />
-
-        <View style={styles.seccion}>
+      </>
+    ),
+    rapidos: (
+          <MovimientosRapidos plantillas={datos.plantillas} onCambio={() => cargar().catch(() => {})} />
+    ),
+    mes: (
+      <View style={styles.seccion}>
           <DeslizarMes mes={mes} onCambio={setMes}>
             <View style={styles.flujo}>
               <SelectorMes mes={mes} onCambio={setMes} />
@@ -368,7 +353,10 @@ export default function PantallaInicio() {
               </Card.Content>
             </Card>
           )}
-
+      </View>
+    ),
+    presupuestos: (
+      <View style={styles.seccion}>
           <Card mode="contained">
             <Card.Title
               title="Presupuestos del mes"
@@ -384,7 +372,10 @@ export default function PantallaInicio() {
               )}
             </Card.Content>
           </Card>
-
+      </View>
+    ),
+    categorias: (
+      <View style={styles.seccion}>
           <Card mode="contained">
             <Card.Title title="Gastos por categoría" subtitle="Toca una para ver sus gastos" />
             <Card.Content style={styles.categorias}>
@@ -411,7 +402,10 @@ export default function PantallaInicio() {
               />
             </Card.Content>
           </Card>
-
+      </View>
+    ),
+    columnas: (
+      <View style={styles.seccion}>
           <SegmentedButtons
             value={escala}
             onValueChange={(v) => setEscala(v as Escala)}
@@ -438,7 +432,10 @@ export default function PantallaInicio() {
               />
             </Card.Content>
           </Card>
-
+      </View>
+    ),
+    evolucion: (
+      <View style={styles.seccion}>
           <Card mode="contained">
             <Card.Title
               title="Evolución de lo disponible"
@@ -454,7 +451,10 @@ export default function PantallaInicio() {
               />
             </Card.Content>
           </Card>
-
+      </View>
+    ),
+    recientes: (
+      <View style={styles.seccion}>
           <Card mode="contained">
             <Card.Title title="Movimientos recientes" />
             {datos.recientes.length === 0 ? (
@@ -472,7 +472,48 @@ export default function PantallaInicio() {
               <Button onPress={() => router.navigate('/movimientos')}>Ver todos</Button>
             </Card.Actions>
           </Card>
-        </View>
+      </View>
+    ),
+  };
+
+
+  return (
+    <View style={styles.flex}>
+      <ScrollView
+        contentContainerStyle={styles.contenido}
+        refreshControl={
+          <RefreshControl
+            refreshing={refrescando}
+            onRefresh={refrescar}
+            colors={[tema.colors.onPrimaryContainer]}
+            progressBackgroundColor={tema.colors.primaryContainer}
+          />
+        }
+      >
+        <CintaTasas />
+        <TarjetaPendientes pendientes={datos.pendientes} onCambio={() => cargar().catch(() => {})} />
+        <AvisosDetectados billeteras={datos.billeteras} />
+        {(datos.sinExportar === null || datos.sinExportar >= DIAS_AVISO_EXPORTAR) && datos.recientes.length > 0 && (
+          <Card mode="contained" style={[styles.aviso, { backgroundColor: tema.colors.tertiaryContainer }]} onPress={() => router.push('/ajustes')}>
+            <Card.Title
+              title={datos.sinExportar === null ? 'Aún no guardas una copia fuera del teléfono' : `Hace ${datos.sinExportar} días que no guardas una copia`}
+              subtitle="Toca para exportarla a Drive o WhatsApp"
+              subtitleNumberOfLines={2}
+              titleNumberOfLines={2}
+              left={(p) => <Avatar.Icon {...p} icon="cloud-upload" />}
+            />
+          </Card>
+        )}
+        <ResumenSaldo billeteras={datos.billeteras} metas={datos.metas} deudas={datos.deudas} anterior={datos.anterior} />
+
+        {secciones
+          .filter((x) => x.visible)
+          .map((x) => (
+            <Fragment key={x.clave}>{bloques[x.clave]}</Fragment>
+          ))}
+        <Button mode="text" icon="view-dashboard-edit-outline" onPress={() => router.push('/inicio-personalizar')}>
+          Personalizar Inicio
+        </Button>
       </ScrollView>
       <BotonFlotante onDictar={() => setDictando(true)} />
       <DialogoDictado visible={dictando} onCerrar={() => setDictando(false)} />

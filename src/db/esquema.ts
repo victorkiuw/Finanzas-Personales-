@@ -408,6 +408,11 @@ const MIGRACIONES: (string | Migracion)[] = [
   `
   ALTER TABLE billeteras ADD COLUMN favorita INTEGER NOT NULL DEFAULT 0 CHECK (favorita IN (0, 1));
   `,
+  // v14: orden elegido arrastrando (0 = sin orden propio: va al final, como antes).
+  `
+  ALTER TABLE billeteras ADD COLUMN orden INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE categorias ADD COLUMN orden INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

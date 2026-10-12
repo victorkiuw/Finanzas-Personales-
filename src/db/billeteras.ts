@@ -1,5 +1,5 @@
 import { esMoneda, type Moneda } from '../lib/moneda';
-import type { BaseDatos } from './tipos';
+import { enTransaccion, type BaseDatos } from './tipos';
 
 export interface Billetera {
   id: number;
@@ -95,10 +95,17 @@ export async function listarBilleteras(
 ): Promise<Billetera[]> {
   const filas = await db.getAllAsync<FilaBilletera>(
     `${SELECT_CON_SALDO} ${incluirArchivadas ? '' : 'WHERE b.archivada = 0'}
-     ORDER BY b.archivada, b.favorita DESC, b.id`,
+     ORDER BY b.archivada, b.orden = 0, b.orden, b.favorita DESC, b.id`,
     [],
   );
   return filas.map(aBilletera);
+}
+
+/** Guarda el orden elegido arrastrando (la primera de la lista, la primera). */
+export async function guardarOrdenBilleteras(db: BaseDatos, ids: number[]): Promise<void> {
+  await enTransaccion(db, async () => {
+    for (let i = 0; i < ids.length; i++) await db.runAsync(`UPDATE billeteras SET orden = ? WHERE id = ?`, [i + 1, ids[i]]);
+  });
 }
 
 export async function establecerFavorita(db: BaseDatos, id: number, favorita: boolean): Promise<void> {

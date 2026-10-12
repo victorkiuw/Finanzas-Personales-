@@ -37,6 +37,9 @@ export function TarjetaBilletera({ billetera, deOtros, onPress, onFavorita }: Pr
   return (
     <Pressable
       onPress={onPress}
+      // Mantener presionado es para moverla (lista reordenable): no la abre.
+      onLongPress={() => {}}
+      delayLongPress={380}
       accessibilityRole="button"
       style={[styles.tarjeta, { backgroundColor: tema.colors.surfaceVariant }, billetera.archivada && styles.archivada]}
       accessibilityLabel={`${billetera.nombre}, ${oculta ? 'saldo oculto' : saldoTexto}`}

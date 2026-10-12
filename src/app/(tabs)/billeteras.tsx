@@ -7,11 +7,18 @@ import { ActivityIndicator, Button, FAB, List, Menu, Text, useTheme } from 'reac
 import { BotonFlotante } from '../../components/BotonFlotante';
 import { DialogoDictado } from '../../components/DialogoDictado';
 import { Dona } from '../../components/Dona';
+import { Reordenable } from '../../components/Reordenable';
 import { Pastilla, ResumenSaldo } from '../../components/ResumenSaldo';
 import { TarjetaBilletera } from '../../components/TarjetaBilletera';
 import { TarjetaDeuda } from '../../components/TarjetaDeuda';
 import { useTasas } from '../../components/TasasProvider';
-import { crearBilleterasSugeridas, establecerFavorita, listarBilleteras, type Billetera } from '../../db/billeteras';
+import {
+  crearBilleterasSugeridas,
+  establecerFavorita,
+  guardarOrdenBilleteras,
+  listarBilleteras,
+  type Billetera,
+} from '../../db/billeteras';
 import { listarCompras, resumenCuotas, type CompraCuotas } from '../../db/cuotas';
 import { ajenoPorBilletera, listarDeudas, resumenDeudas, type Deuda } from '../../db/deudas';
 import { listarMetas, type Meta } from '../../db/metas';
@@ -19,8 +26,13 @@ import { convertir, totalConsolidado } from '../../lib/conversion';
 import { formatearMonto } from '../../lib/moneda';
 
 type Filtro = 'TODAS' | 'BS' | 'DIVISAS';
-type Orden = 'FAVORITAS' | 'SALDO' | 'NOMBRE';
-const NOMBRE_ORDEN: Record<Orden, string> = { FAVORITAS: 'Favoritas primero', SALDO: 'Mayor saldo', NOMBRE: 'Nombre' };
+type Orden = 'PROPIO' | 'FAVORITAS' | 'SALDO' | 'NOMBRE';
+const NOMBRE_ORDEN: Record<Orden, string> = {
+  PROPIO: 'Mi orden (arrastrar)',
+  FAVORITAS: 'Favoritas primero',
+  SALDO: 'Mayor saldo',
+  NOMBRE: 'Nombre',
+};
 
 export default function PantallaBilleteras() {
   const db = useSQLiteContext();
@@ -33,7 +45,9 @@ export default function PantallaBilleteras() {
   const { tasas, referencia, cambio, monedaBase, actualizar } = useTasas();
   const [refrescando, setRefrescando] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('TODAS');
-  const [orden, setOrden] = useState<Orden>('FAVORITAS');
+  const [orden, setOrden] = useState<Orden>('PROPIO');
+  // Mientras se arrastra una billetera no se desplaza la pantalla.
+  const [moviendo, setMoviendo] = useState(false);
   const [menuOrden, setMenuOrden] = useState(false);
   const [verArchivadas, setVerArchivadas] = useState(false);
   const [creando, setCreando] = useState(false);
@@ -91,7 +105,8 @@ export default function PantallaBilleteras() {
     .sort((a, b) => {
       if (orden === 'NOMBRE') return a.nombre.localeCompare(b.nombre, 'es');
       if (orden === 'SALDO') return (enBase(b) ?? 0) - (enBase(a) ?? 0);
-      return Number(b.favorita) - Number(a.favorita);
+      if (orden === 'FAVORITAS') return Number(b.favorita) - Number(a.favorita);
+      return 0; // el de la base: el orden propio
     });
   const segmentos = filtradas
     .map((b) => ({ id: b.id, nombre: b.nombre, color: b.color_hex, valor: Math.max(enBase(b) ?? 0, 0) }))
@@ -115,16 +130,36 @@ export default function PantallaBilleteras() {
   return (
     <>
       <FlatList
-        data={filtradas}
-        keyExtractor={(b) => String(b.id)}
-        renderItem={({ item }) => (
-          <TarjetaBilletera
-            billetera={item}
-            deOtros={ajenoPor.get(item.id)}
-            onPress={() => abrir(item)}
-            onFavorita={() => alternarFavorita(item).catch((e) => Alert.alert('Error', String(e)))}
-          />
-        )}
+        // Una sola fila con toda la lista, para poder reordenarla arrastrando.
+        data={activas.length > 0 ? ['lista'] : []}
+        keyExtractor={(k) => k}
+        scrollEnabled={!moviendo}
+        renderItem={() => {
+          const tarjeta = (b: Billetera) => (
+            <TarjetaBilletera
+              billetera={b}
+              deOtros={ajenoPor.get(b.id)}
+              onPress={() => abrir(b)}
+              onFavorita={() => alternarFavorita(b).catch((e) => Alert.alert('Error', String(e)))}
+            />
+          );
+          if (orden !== 'PROPIO') return <View>{filtradas.map((b) => <View key={b.id}>{tarjeta(b)}</View>)}</View>;
+          return (
+            <Reordenable
+              items={filtradas}
+              clave={(b) => b.id}
+              onArrastre={setMoviendo}
+              onReordenar={(nuevas) => {
+                // Las que no se ven por el filtro conservan su lugar relativo al final.
+                const ids = [...nuevas.map((b) => b.id), ...activas.filter((b) => !nuevas.includes(b)).map((b) => b.id)];
+                guardarOrdenBilleteras(db, ids)
+                  .then(cargar)
+                  .catch((e) => Alert.alert('Error', String(e)));
+              }}
+              render={(b) => tarjeta(b)}
+            />
+          );
+        }}
         contentContainerStyle={{ paddingTop: 8, paddingBottom: 96 }}
         refreshControl={
           <RefreshControl
@@ -176,7 +211,7 @@ export default function PantallaBilleteras() {
 
               <View style={styles.filaOrden}>
                 <Text variant="bodyMedium" style={[styles.flex, { color: tema.colors.onSurfaceVariant }]}>
-                  {`${filtradas.length} ${filtradas.length === 1 ? 'billetera' : 'billeteras'}`}
+                  {`${filtradas.length} ${filtradas.length === 1 ? 'billetera' : 'billeteras'}${orden === 'PROPIO' ? ' · mantén presionada para moverla' : ''}`}
                 </Text>
                 <Menu
                   visible={menuOrden}

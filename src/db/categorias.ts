@@ -1,5 +1,5 @@
 import { ErrorValidacion } from './billeteras';
-import type { BaseDatos } from './tipos';
+import { enTransaccion, type BaseDatos } from './tipos';
 
 export type TipoCategoria = 'GASTO' | 'INGRESO';
 
@@ -36,7 +36,7 @@ export async function listarCategorias(
   const filas = await db.getAllAsync<FilaCategoria>(
     `SELECT id, nombre, tipo, color_hex, icono, archivada FROM categorias
      ${condiciones.length ? 'WHERE ' + condiciones.join(' AND ') : ''}
-     ORDER BY archivada, tipo, nombre COLLATE NOCASE`,
+     ORDER BY archivada, tipo, orden = 0, orden, nombre COLLATE NOCASE`,
     tipo ? [tipo] : [],
   );
   return filas.map(aCategoria);
@@ -130,4 +130,11 @@ export async function categoriaComisiones(db: BaseDatos): Promise<number> {
     'bank-transfer',
   ]);
   return r.lastInsertRowId;
+}
+
+/** Guarda el orden elegido arrastrando las categorías (la primera de la lista, la primera). */
+export async function guardarOrdenCategorias(db: BaseDatos, ids: number[]): Promise<void> {
+  await enTransaccion(db, async () => {
+    for (let i = 0; i < ids.length; i++) await db.runAsync(`UPDATE categorias SET orden = ? WHERE id = ?`, [i + 1, ids[i]]);
+  });
 }

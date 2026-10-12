@@ -2,7 +2,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
@@ -23,7 +23,7 @@ import { dividirGasto, partesIguales, type ParteDivision } from '../db/dividir';
 import { cambioDe } from '../db/tasas';
 import { convertir } from '../lib/conversion';
 import { crearPlantilla } from '../db/plantillas';
-import { listarCategorias, type Categoria } from '../db/categorias';
+import { guardarOrdenCategorias, listarCategorias, type Categoria } from '../db/categorias';
 import {
   actualizarMovimiento,
   crearMovimiento,
@@ -49,6 +49,8 @@ import {
 import { SelectorBilletera } from './SelectorBilletera';
 import { useTasas } from './TasasProvider';
 import { useListo } from './ConfirmacionListo';
+import { Reordenable } from './Reordenable';
+import { TecladoMonto } from './TecladoMonto';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
 interface Props {
@@ -91,6 +93,10 @@ export function FormularioMovimiento({
   const [original, setOriginal] = useState<Movimiento | null>(null);
   const [billeteras, setBilleteras] = useState<Billetera[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  // Mientras se arrastra una categoría no se desplaza la pantalla.
+  const [moviendo, setMoviendo] = useState(false);
+  // Teclado numérico propio para el monto (se abre al tocar el campo).
+  const [teclado, setTeclado] = useState(false);
 
   const [tipo, setTipo] = useState<TipoMovimiento>(tipoInicial);
   const [montoTexto, setMontoTexto] = useState('');
@@ -463,7 +469,7 @@ export function FormularioMovimiento({
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Stack.Screen options={{ title: titulo }} />
-      <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled" scrollEnabled={!moviendo}>
         <SegmentedButtons
           value={tipo}
           onValueChange={(v) => cambiarTipo(v as TipoMovimiento)}
@@ -483,12 +489,26 @@ export function FormularioMovimiento({
             value={montoTexto}
             onChangeText={cambiarMonto}
             keyboardType="decimal-pad"
+            // Se usa el teclado de la app (más grande y con sumas rápidas) en vez del de Android.
+            showSoftInputOnFocus={false}
+            onFocus={() => setTeclado(true)}
             placeholder="0,00"
             mode="outlined"
             autoFocus={!editando}
             style={styles.monto}
             right={origen ? <TextInput.Affix text={INFO_MONEDA[origen.moneda].corto} /> : undefined}
           />
+          {teclado && (
+            <TecladoMonto
+              texto={montoTexto}
+              onCambio={cambiarMonto}
+              color={COLOR_TIPO[tipo]}
+              onListo={() => {
+                setTeclado(false);
+                Keyboard.dismiss();
+              }}
+            />
+          )}
           {monto === null && montoTexto.trim() !== '' ? (
             <HelperText type="error">Número no válido</HelperText>
           ) : quedaNegativo ? (
@@ -563,17 +583,33 @@ export function FormularioMovimiento({
         ) : (
           <View style={styles.bloque}>
             <Text variant="labelLarge">Categoría</Text>
-            <View style={styles.chips}>
-              {categoriasTipo.map((c) => {
+            <Reordenable
+              items={categoriasTipo}
+              clave={(c) => c.id}
+              estilo={styles.chips}
+              onArrastre={setMoviendo}
+              onReordenar={(nuevas) => {
+                // Se guarda el orden y se aplica a la lista completa (las de otro tipo quedan igual).
+                const ids = nuevas.map((c) => c.id);
+                setCategorias((todas) => [
+                  ...todas.filter((c) => c.tipo !== tipo),
+                  ...ids.map((id) => todas.find((c) => c.id === id)!).filter(Boolean),
+                  ...todas.filter((c) => c.tipo === tipo && !ids.includes(c.id)),
+                ]);
+                guardarOrdenCategorias(db, ids).catch(() => {});
+              }}
+              render={(c, levantado) => {
                 const elegida = c.id === categoriaId;
                 return (
                   <Chip
-                    key={c.id}
                     icon={c.icono}
                     selected={elegida}
                     showSelectedCheck={false}
-                    mode={elegida ? 'flat' : 'outlined'}
+                    mode={elegida || levantado ? 'flat' : 'outlined'}
                     onPress={() => setCategoriaId(c.id)}
+                    // Mantener presionado es para moverla: no la elige.
+                    onLongPress={() => {}}
+                    delayLongPress={380}
                     style={elegida ? { backgroundColor: c.color_hex } : undefined}
                     textStyle={elegida ? styles.textoElegido : undefined}
                     selectedColor={elegida ? '#FFFFFF' : undefined}
@@ -581,7 +617,9 @@ export function FormularioMovimiento({
                     {c.nombre}
                   </Chip>
                 );
-              })}
+              }}
+            />
+            <View style={styles.filaNueva}>
               <Chip
                 icon="plus"
                 mode="outlined"
@@ -589,6 +627,9 @@ export function FormularioMovimiento({
               >
                 Nueva
               </Chip>
+              <Text variant="bodySmall" style={[styles.flex, { color: tema.colors.onSurfaceVariant }]}>
+                Mantén presionada una categoría para moverla.
+              </Text>
             </View>
           </View>
         )}
@@ -827,6 +868,7 @@ const styles = StyleSheet.create({
   monto: { fontSize: 24 },
   bloque: { gap: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filaNueva: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
   miniatura: { width: 72, height: 72, borderRadius: 8 },
   modal: { margin: 16, backgroundColor: '#000', borderRadius: 12, overflow: 'hidden' },
   imagenGrande: { width: '100%', height: 520 },

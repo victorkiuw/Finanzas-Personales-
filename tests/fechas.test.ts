@@ -44,3 +44,12 @@ test('mesesHasta', () => {
   assert.equal(mesesHasta('2027-09-22', hoy), 13);
   assert.equal(mesesHasta('2026-01-01', hoy), 1);
 });
+
+test('secciones de Inicio: guarda el orden y completa las que falten', async () => {
+  const { leerSecciones, SECCIONES_INICIO } = await import('../src/lib/seccionesInicio');
+  assert.deepEqual(leerSecciones(null), SECCIONES_INICIO);
+  assert.deepEqual(leerSecciones('roto'), SECCIONES_INICIO);
+  const l = leerSecciones(JSON.stringify([{ clave: 'recientes', visible: false }, { clave: 'nada', visible: true }]));
+  assert.deepEqual(l[0], { clave: 'recientes', visible: false });
+  assert.equal(l.length, SECCIONES_INICIO.length);
+});

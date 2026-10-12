@@ -161,6 +161,13 @@ export default function PantallaAjustes() {
       <List.Section>
         <List.Subheader>Personalizar</List.Subheader>
         <List.Item
+          title="Personalizar Inicio"
+          description="Ordenar u ocultar las secciones de la pantalla principal"
+          left={(p) => <List.Icon {...p} icon="view-dashboard-edit-outline" />}
+          right={(p) => <List.Icon {...p} icon="chevron-right" />}
+          onPress={() => router.push('/inicio-personalizar')}
+        />
+        <List.Item
           title="Ver la guía de bienvenida"
           description="El recorrido corto por la app"
           left={(p) => <List.Icon {...p} icon="map-marker-path" />}
