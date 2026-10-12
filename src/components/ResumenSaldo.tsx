@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
 
@@ -12,6 +12,8 @@ import { formatearTasa } from '../lib/tasa';
 import { coloresExtra } from '../lib/tema';
 import { COLOR_GASTO_OSCURO, COLOR_INGRESO_OSCURO, COLOR_GASTO, COLOR_INGRESO } from './ItemMovimiento';
 import { useModoDiscreto } from './ModoDiscreto';
+import { NumeroAnimado } from './NumeroAnimado';
+import { vibrar } from '../lib/vibrar';
 import { useTasas, VISTAS, type Vista } from './TasasProvider';
 
 const NOMBRE_VISTA: Record<Vista, string> = { BS: 'Bs.', USD: 'USD', USDT: 'USDT', EUR: 'EUR' };
@@ -63,6 +65,16 @@ export function ResumenSaldo({
   const { cambio, referencia, monedaBase, vista, cambiarVista, tasas } = useTasas();
   const { discreto, alternar } = useModoDiscreto();
   const [verAparte, setVerAparte] = useState(false);
+  // Doble toque sobre el total: oculta o muestra los montos.
+  const ultimoToque = useRef(0);
+  const tocarTotal = () => {
+    const ahora = Date.now();
+    if (ahora - ultimoToque.current < 320) {
+      vibrar('media');
+      alternar();
+      ultimoToque.current = 0;
+    } else ultimoToque.current = ahora;
+  };
   const color = extra.heroeTexto;
   const suave = { color, opacity: 0.75 };
 
@@ -111,9 +123,21 @@ export function ResumenSaldo({
           onPress={alternar}
         />
       </View>
-      <Text variant="displaySmall" style={[styles.total, { color }]} numberOfLines={1} adjustsFontSizeToFit>
-        {total !== null ? formatearMonto(total, monedaBase) : '—'}
-      </Text>
+      <Pressable onPress={tocarTotal} accessibilityLabel="Toca dos veces para ocultar o mostrar los montos">
+        {total !== null ? (
+          <NumeroAnimado
+            key={monedaBase}
+            valor={total}
+            formatear={(v) => formatearMonto(v, monedaBase)}
+            variant="displaySmall"
+            style={[styles.total, { color }]}
+          />
+        ) : (
+          <Text variant="displaySmall" style={[styles.total, { color }]}>
+            —
+          </Text>
+        )}
+      </Pressable>
       {total === null && (
         <Text variant="bodySmall" style={[suave, styles.centrado]}>
           {faltaEuro

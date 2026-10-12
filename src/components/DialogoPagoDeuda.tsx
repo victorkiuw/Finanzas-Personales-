@@ -9,6 +9,7 @@ import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto
 import { calcularTasa, enviadoConTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
+import { useListo } from './ConfirmacionListo';
 
 interface Props {
   deuda: Deuda;
@@ -24,6 +25,7 @@ interface Props {
  */
 export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
   const db = useSQLiteContext();
+  const mostrarListo = useListo();
   const [todas, setTodas] = useState<Billetera[]>([]);
   // Dinero ajeno del que salió esta deuda, si es el caso.
   const [guardado, setGuardado] = useState<Deuda | null>(null);
@@ -170,6 +172,8 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
           fecha,
         });
       }
+      const saldada = (equivalente ?? 0) >= deuda.pendiente;
+      mostrarListo(deuda.ajeno ? 'Registrado' : saldada ? (meDeben ? '¡Te pagó todo!' : '¡Deuda saldada!') : 'Pago registrado');
       onCerrar(true);
     } catch (e) {
       setError(e instanceof ErrorValidacion ? e.message : String(e));

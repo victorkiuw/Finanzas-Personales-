@@ -6,6 +6,7 @@ import type { ColorValue } from 'react-native';
 import { IconButton, useTheme } from 'react-native-paper';
 
 import { coloresExtra } from '../../lib/tema';
+import { vibrar } from '../../lib/vibrar';
 
 type NombreIcono = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -19,6 +20,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      screenListeners={{ tabPress: () => vibrar('suave') }}
       screenOptions={{
         headerStyle: { backgroundColor: tema.colors.background },
         headerTintColor: tema.colors.onSurface,

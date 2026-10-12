@@ -6,6 +6,7 @@ import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import { Candado } from '../components/Candado';
+import { ConfirmacionListoProvider } from '../components/ConfirmacionListo';
 import { ModoDiscretoProvider } from '../components/ModoDiscreto';
 import { TasasProvider } from '../components/TasasProvider';
 import { migrar, NOMBRE_BD } from '../db/esquema';
@@ -40,6 +41,7 @@ export default function RootLayout() {
       <TasasProvider>
         <PaperProvider theme={tema}>
           <StatusBar style={tema.dark ? 'light' : 'dark'} />
+          <ConfirmacionListoProvider>
           <Candado>
             <ModoDiscretoProvider>
               {(discreto) => (
@@ -59,6 +61,7 @@ export default function RootLayout() {
               )}
             </ModoDiscretoProvider>
           </Candado>
+          </ConfirmacionListoProvider>
         </PaperProvider>
       </TasasProvider>
     </SQLiteProvider>

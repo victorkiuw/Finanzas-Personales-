@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Alert, SectionList, StyleSheet, View } from 'react-native';
+import { Alert, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Text, useTheme } from 'react-native-paper';
 
 import { listarMovimientos, type FiltroMovimientos, type Movimiento } from '../db/movimientos';
@@ -19,10 +19,13 @@ interface Props {
   /** Ingresos y gastos de cada día (en `monedaTotales`) para mostrarlos junto a la fecha. */
   totalesDia?: Map<string, { ingresos: number; gastos: number }>;
   monedaTotales?: Moneda;
+  /** Al jalar hacia abajo, además de recargar la lista. */
+  onRefrescar?: () => Promise<void> | void;
 }
 
 /** Lista paginada (scroll infinito) y agrupada por día; se recarga al volver a la pantalla. */
-export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movimientos.', totalesDia, monedaTotales }: Props) {
+export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movimientos.', totalesDia, monedaTotales, onRefrescar }: Props) {
+  const [refrescando, setRefrescando] = useState(false);
   const db = useSQLiteContext();
   const tema = useTheme();
   const [items, setItems] = useState<Movimiento[] | null>(null);
@@ -135,6 +138,19 @@ export function ListaMovimientos({ filtro, encabezado, textoVacio = 'No hay movi
       onEndReached={cargarMas}
       onEndReachedThreshold={0.5}
       contentContainerStyle={{ paddingBottom: 96 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refrescando}
+          onRefresh={async () => {
+            setRefrescando(true);
+            await recargar().catch(() => {});
+            await onRefrescar?.();
+            setRefrescando(false);
+          }}
+          colors={[tema.colors.onPrimaryContainer]}
+          progressBackgroundColor={tema.colors.primaryContainer}
+        />
+      }
       stickySectionHeadersEnabled={false}
     />
   );

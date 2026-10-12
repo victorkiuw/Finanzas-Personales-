@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Badge, FAB, IconButton, Searchbar, Text, useTheme } from 'react-native-paper';
 
+import { BotonFlotante } from '../../components/BotonFlotante';
 import { CalendarioMes } from '../../components/CalendarioMes';
+import { DialogoDictado } from '../../components/DialogoDictado';
 import { COLOR_GASTO, COLOR_GASTO_OSCURO, COLOR_INGRESO, COLOR_INGRESO_OSCURO } from '../../components/ItemMovimiento';
 import { ListaMovimientos } from '../../components/ListaMovimientos';
 import { MenuFiltro } from '../../components/MenuFiltro';
@@ -46,6 +48,9 @@ export default function PantallaMovimientos() {
   const [anio, setAnio] = useState(() => new Date().getFullYear());
   const [dia, setDia] = useState<string | null>(null);
   const [verFiltros, setVerFiltros] = useState(false);
+  const [dictando, setDictando] = useState(false);
+  // Sube al jalar hacia abajo para volver a leer los totales.
+  const [version, setVersion] = useState(0);
   const [billeteraId, setBilleteraId] = useState<number | undefined>();
   const [tipo, setTipo] = useState<TipoTransaccion | undefined>();
   const [categoriaId, setCategoriaId] = useState<number | undefined>();
@@ -82,7 +87,7 @@ export default function PantallaMovimientos() {
           .then(setFilasAnio)
           .catch(() => {});
       }
-    }, [db, rango.desde, rango.hasta, filtroReporte, vista, anio]),
+    }, [db, rango.desde, rango.hasta, filtroReporte, vista, anio, version]),
   );
 
   const sinTotales = tipo === 'TRANSFERENCIA';
@@ -187,7 +192,10 @@ export default function PantallaMovimientos() {
 
   const hayBilleteras = billeteras.some((b) => !b.archivada);
   const fab = hayBilleteras && (
-    <FAB icon="plus" accessibilityLabel="Nuevo movimiento" style={styles.fab} onPress={() => router.push('/movimiento/nuevo')} />
+    <>
+      <BotonFlotante onDictar={() => setDictando(true)} />
+      <DialogoDictado visible={dictando} onCerrar={() => setDictando(false)} />
+    </>
   );
 
   if (vista === 'ANIO' && !buscando) {
@@ -255,6 +263,7 @@ export default function PantallaMovimientos() {
       <ListaMovimientos
         filtro={filtroLista}
         totalesDia={buscando ? undefined : porDia}
+        onRefrescar={() => setVersion((v) => v + 1)}
         monedaTotales={monedaBase}
         encabezado={
           <View>

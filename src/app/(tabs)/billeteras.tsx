@@ -1,9 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, FAB, List, Menu, Text, useTheme } from 'react-native-paper';
 
+import { BotonFlotante } from '../../components/BotonFlotante';
+import { DialogoDictado } from '../../components/DialogoDictado';
 import { Dona } from '../../components/Dona';
 import { Pastilla, ResumenSaldo } from '../../components/ResumenSaldo';
 import { TarjetaBilletera } from '../../components/TarjetaBilletera';
@@ -28,12 +30,14 @@ export default function PantallaBilleteras() {
   // Deudas abiertas: de aquí sale el dinero de otras personas en mis cuentas.
   const [deudas, setDeudas] = useState<Deuda[]>([]);
   const [compras, setCompras] = useState<CompraCuotas[]>([]);
-  const { tasas, referencia, cambio, monedaBase } = useTasas();
+  const { tasas, referencia, cambio, monedaBase, actualizar } = useTasas();
+  const [refrescando, setRefrescando] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('TODAS');
   const [orden, setOrden] = useState<Orden>('FAVORITAS');
   const [menuOrden, setMenuOrden] = useState(false);
   const [verArchivadas, setVerArchivadas] = useState(false);
   const [creando, setCreando] = useState(false);
+  const [dictando, setDictando] = useState(false);
 
   const cargar = useCallback(async () => {
     const [b, m, d, c] = await Promise.all([
@@ -122,6 +126,19 @@ export default function PantallaBilleteras() {
           />
         )}
         contentContainerStyle={{ paddingTop: 8, paddingBottom: 96 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refrescando}
+            onRefresh={async () => {
+              setRefrescando(true);
+              await actualizar(true).catch(() => {});
+              await cargar().catch(() => {});
+              setRefrescando(false);
+            }}
+            colors={[tema.colors.onPrimaryContainer]}
+            progressBackgroundColor={tema.colors.primaryContainer}
+          />
+        }
         ListHeaderComponent={
           activas.length > 0 ? (
             <View style={styles.cabecera}>
@@ -251,12 +268,10 @@ export default function PantallaBilleteras() {
         }
       />
       {activas.length > 0 && (
-        <FAB
-          icon="plus"
-          label="Movimiento"
-          style={[styles.fab, { bottom: 16 }]}
-          onPress={() => router.push('/movimiento/nuevo')}
-        />
+        <>
+          <BotonFlotante onDictar={() => setDictando(true)} />
+          <DialogoDictado visible={dictando} onCerrar={() => setDictando(false)} />
+        </>
       )}
     </>
   );

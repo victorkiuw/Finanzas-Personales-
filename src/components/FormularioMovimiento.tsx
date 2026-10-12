@@ -48,6 +48,7 @@ import {
 } from '../lib/comision';
 import { SelectorBilletera } from './SelectorBilletera';
 import { useTasas } from './TasasProvider';
+import { useListo } from './ConfirmacionListo';
 import { SugerenciasTasa } from './SugerenciasTasa';
 
 interface Props {
@@ -113,6 +114,7 @@ export function FormularioMovimiento({
   const [verComprobante, setVerComprobante] = useState(false);
   const [partes, setPartes] = useState<{ persona: string; montoTexto: string }[]>([{ persona: '', montoTexto: '' }]);
   const { tasas, referencia } = useTasas();
+  const mostrarListo = useListo();
   // Pago Móvil desde bolívares: a persona o a comercio (null = según la billetera); 'OTRA' = monto a mano.
   const [destinoPago, setDestinoPago] = useState<DestinoPago | 'OTRA' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -367,6 +369,7 @@ export function FormularioMovimiento({
         await dividirGasto(db, { ...datos, categoria_id: categoriaId }, lista, tasas[referencia]?.tasa ?? null);
       } else if (id === undefined) await crearMovimiento(db, datos);
       else await actualizarMovimiento(db, id, datos);
+      mostrarListo(id === undefined ? (tipo === 'GASTO' ? 'Gasto guardado' : tipo === 'INGRESO' ? 'Ingreso guardado' : 'Transferencia guardada') : 'Cambios guardados');
       router.back();
     } catch (e) {
       if (e instanceof ErrorValidacion) setError(e.message);

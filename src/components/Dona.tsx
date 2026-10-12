@@ -1,4 +1,5 @@
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Svg, { Circle, G } from 'react-native-svg';
 
@@ -38,10 +39,26 @@ export function Dona({
   // Un pequeño espacio entre partes, salvo que haya una sola.
   const hueco = positivos.length > 1 ? 3 : 0;
   let acumulado = 0;
+  // Aparece girando y creciendo.
+  const entrada = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    entrada.setValue(0);
+    Animated.timing(entrada, { toValue: 1, duration: 650, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }).start();
+  }, [entrada, total]);
 
   return (
     <View style={styles.bloque}>
-      <View style={{ width: tamano, height: tamano }}>
+      <Animated.View
+        style={{
+          width: tamano,
+          height: tamano,
+          opacity: entrada,
+          transform: [
+            { scale: entrada.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
+            { rotate: entrada.interpolate({ inputRange: [0, 1], outputRange: ['-60deg', '0deg'] }) },
+          ],
+        }}
+      >
         <Svg width={tamano} height={tamano}>
           <G rotation={-90} origin={`${tamano / 2}, ${tamano / 2}`}>
             <Circle cx={tamano / 2} cy={tamano / 2} r={radio} stroke={tema.colors.outlineVariant} strokeWidth={grosor} fill="none" />
@@ -74,7 +91,7 @@ export function Dona({
             {valorCentro}
           </Text>
         </View>
-      </View>
+      </Animated.View>
       {leyenda && total > 0 && (
         <View style={styles.leyenda}>
           {positivos.map((s) => (

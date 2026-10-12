@@ -1,11 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Avatar, Button, Card, FAB, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { AccesosRapidos } from '../../components/AccesosRapidos';
 import { AvisosDetectados } from '../../components/AvisosDetectados';
+import { BotonFlotante } from '../../components/BotonFlotante';
 import { CintaTasas } from '../../components/CintaTasas';
 import { DialogoDictado } from '../../components/DialogoDictado';
 import { Dona } from '../../components/Dona';
@@ -90,7 +91,20 @@ interface Datos {
 export default function PantallaInicio() {
   const db = useSQLiteContext();
   const tema = useTheme();
-  const { cambio, referencia, monedaBase, versionHistorial } = useTasas();
+  const { cambio, referencia, monedaBase, versionHistorial, actualizar } = useTasas();
+  const [refrescando, setRefrescando] = useState(false);
+  // Jalar hacia abajo: tasas nuevas (si hay internet) y todo recalculado.
+  const refrescar = async () => {
+    setRefrescando(true);
+    try {
+      await actualizar(true);
+      await cargar();
+    } catch {
+      // Sin internet se queda con lo que hay.
+    } finally {
+      setRefrescando(false);
+    }
+  };
   // Billeteras "guardadas aparte" cuyo saldo se destapó tocándolas.
   const [visibles, setVisibles] = useState<Set<number>>(() => new Set());
   // Primer día del mes que se está viendo.
@@ -225,7 +239,17 @@ export default function PantallaInicio() {
 
   return (
     <View style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.contenido}>
+      <ScrollView
+        contentContainerStyle={styles.contenido}
+        refreshControl={
+          <RefreshControl
+            refreshing={refrescando}
+            onRefresh={refrescar}
+            colors={[tema.colors.onPrimaryContainer]}
+            progressBackgroundColor={tema.colors.primaryContainer}
+          />
+        }
+      >
         <CintaTasas />
         <TarjetaPendientes pendientes={datos.pendientes} onCambio={() => cargar().catch(() => {})} />
         <AvisosDetectados billeteras={datos.billeteras} />
@@ -445,7 +469,7 @@ export default function PantallaInicio() {
           </Card>
         </View>
       </ScrollView>
-      <FAB icon="plus" accessibilityLabel="Nuevo movimiento" style={styles.fab} onPress={() => router.push('/movimiento/nuevo')} />
+      <BotonFlotante onDictar={() => setDictando(true)} />
       <DialogoDictado visible={dictando} onCerrar={() => setDictando(false)} />
       <GuiaBienvenida visible={guia} onTerminar={terminarGuia} />
     </View>

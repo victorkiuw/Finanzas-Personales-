@@ -4,6 +4,7 @@ import { Icon, Text, useTheme } from 'react-native-paper';
 
 import type { TotalCategoria, TotalMes } from '../db/reportes';
 import { formatearMonto, type Moneda } from '../lib/moneda';
+import { BarraAnimada } from './BarraAnimada';
 import { IconoCuadro } from './IconoCuadro';
 
 /*
@@ -82,12 +83,10 @@ export function BarrasCategorias({
                   {`${porcentaje}%`}
                 </Text>
               </View>
-              <View style={[styles.pista, { backgroundColor: tema.colors.surfaceVariant }]}>
-                <View
-                  style={[
-                    styles.relleno,
-                    { width: `${Math.max((c.total / mayor) * 100, 2)}%`, backgroundColor: tema.colors.primary },
-                  ]}
+              <View style={[styles.pista, { backgroundColor: tema.colors.outlineVariant }]}>
+                <BarraAnimada
+                  porcentaje={Math.max((c.total / mayor) * 100, 2)}
+                  style={[styles.relleno, { backgroundColor: c.id === -1 ? tema.colors.outline : c.color }]}
                 />
               </View>
             </View>

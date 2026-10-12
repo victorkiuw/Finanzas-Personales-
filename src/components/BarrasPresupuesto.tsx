@@ -3,6 +3,7 @@ import { Icon, Text, useTheme } from 'react-native-paper';
 
 import type { EstadoPresupuesto } from '../db/presupuestos';
 import { formatearMonto } from '../lib/moneda';
+import { BarraAnimada } from './BarraAnimada';
 import { IconoCuadro } from './IconoCuadro';
 
 // Colores de estado con icono y texto (nunca solo color).
@@ -30,8 +31,8 @@ export function BarrasPresupuesto({ estados }: { estados: EstadoPresupuesto[] })
                   {`${formatearMonto(e.gastado, e.moneda)} / ${formatearMonto(e.monto, e.moneda)}`}
                 </Text>
               </View>
-              <View style={[styles.pista, { backgroundColor: tema.colors.surfaceVariant }]}>
-                <View style={[styles.relleno, { width: `${Math.min(e.fraccion, 1) * 100}%`, backgroundColor: color }]} />
+              <View style={[styles.pista, { backgroundColor: tema.colors.outlineVariant }]}>
+                <BarraAnimada porcentaje={Math.min(e.fraccion, 1) * 100} style={[styles.relleno, { backgroundColor: color }]} />
               </View>
               <View style={styles.estado}>
                 {e.estado !== 'ok' && <Icon source={e.estado === 'excedido' ? 'alert-circle' : 'alert'} size={14} color={color} />}
