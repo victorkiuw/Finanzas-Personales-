@@ -9,6 +9,7 @@ import { ActivityIndicator, Divider, List, Switch, Text, useTheme } from 'react-
 
 import { abrirAjustesNotificaciones, lectorDisponible, tienePermiso } from '../../modules/lector-notificaciones';
 import { autenticar, CLAVE_BLOQUEO, puedeBloquear } from '../components/Candado';
+import { CLAVE_GUIA } from '../components/GuiaBienvenida';
 import { useTasas } from '../components/TasasProvider';
 import { exportarMovimientosCsv } from '../db/exportar';
 import { exportarDatos, importarDatos, resumenRespaldo, validarRespaldo, type Respaldo } from '../db/respaldo';
@@ -159,6 +160,15 @@ export default function PantallaAjustes() {
       <Stack.Screen options={{ title: 'Ajustes' }} />
       <List.Section>
         <List.Subheader>Personalizar</List.Subheader>
+        <List.Item
+          title="Ver la guía de bienvenida"
+          description="El recorrido corto por la app"
+          left={(p) => <List.Icon {...p} icon="map-marker-path" />}
+          onPress={async () => {
+            await db.runAsync(`DELETE FROM preferencias WHERE clave = ?`, [CLAVE_GUIA]);
+            router.navigate('/');
+          }}
+        />
         <List.Item
           title="Categorías"
           description="Crear, renombrar, cambiar icono y color, o archivar"

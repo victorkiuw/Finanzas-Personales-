@@ -404,6 +404,10 @@ const MIGRACIONES: (string | Migracion)[] = [
   ALTER TABLE ajustes_deuda ADD COLUMN transaccion_id INTEGER REFERENCES transacciones(id) ON DELETE CASCADE;
   CREATE INDEX idx_ajustes_transaccion ON ajustes_deuda(transaccion_id);
   `,
+  // v13: billeteras favoritas (salen primero en Inicio y al elegir billetera).
+  `
+  ALTER TABLE billeteras ADD COLUMN favorita INTEGER NOT NULL DEFAULT 0 CHECK (favorita IN (0, 1));
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

@@ -136,3 +136,15 @@ test('billeteras sugeridas y totales por moneda', async () => {
   const totales = totalesPorMoneda(await listarBilleteras(db));
   assert.deepEqual(totales, { USD: 10000, BS: 0, USDT: 0 });
 });
+
+test('favoritas: salen primero en la lista', async () => {
+  const { crearBdMemoria } = await import('./bd-memoria');
+  const { crearBilletera, establecerFavorita, listarBilleteras } = await import('../src/db/billeteras');
+  const db = await crearBdMemoria();
+  const base = { icono: 'wallet', color_hex: '#000000', moneda: 'USD' as const, balance_inicial: 0 };
+  await crearBilletera(db, { ...base, nombre: 'A' });
+  const b = await crearBilletera(db, { ...base, nombre: 'B' });
+  await establecerFavorita(db, b, true);
+  const lista = await listarBilleteras(db);
+  assert.deepEqual(lista.map((x) => [x.nombre, x.favorita]), [['B', true], ['A', false]]);
+});

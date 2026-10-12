@@ -20,6 +20,8 @@ export interface Billetera {
   margen_cambio: number | null;
   /** Si su saldo se suma al total disponible (Binance como ahorro discreto, no). */
   en_total: boolean;
+  /** Marcada con estrella: sale primero en las listas. */
+  favorita: boolean;
 }
 
 export interface DatosBilletera {
@@ -38,14 +40,15 @@ export const LARGO_MAXIMO_NOMBRE = 40;
 
 export class ErrorValidacion extends Error {}
 
-interface FilaBilletera extends Omit<Billetera, 'archivada' | 'en_total'> {
+interface FilaBilletera extends Omit<Billetera, 'archivada' | 'en_total' | 'favorita'> {
   archivada: number;
   en_total: number;
+  favorita: number;
 }
 
 const SELECT_CON_SALDO = `
   SELECT b.id, b.nombre, b.moneda, b.balance_inicial, b.icono, b.color_hex, b.archivada,
-    b.comision_porcentaje, b.comision_minima, b.margen_cambio, b.en_total,
+    b.comision_porcentaje, b.comision_minima, b.margen_cambio, b.en_total, b.favorita,
     b.balance_inicial
     + COALESCE((
         SELECT SUM(CASE WHEN t.tipo IN ('INGRESO', 'RETIRO_META', 'PRESTAMO_RECIBIDO', 'COBRO_DEUDA')
@@ -58,7 +61,7 @@ const SELECT_CON_SALDO = `
   FROM billeteras b`;
 
 function aBilletera(fila: FilaBilletera): Billetera {
-  return { ...fila, archivada: fila.archivada === 1, en_total: fila.en_total === 1 };
+  return { ...fila, archivada: fila.archivada === 1, en_total: fila.en_total === 1, favorita: fila.favorita === 1 };
 }
 
 function validar(datos: DatosBilletera): DatosBilletera {
@@ -92,10 +95,14 @@ export async function listarBilleteras(
 ): Promise<Billetera[]> {
   const filas = await db.getAllAsync<FilaBilletera>(
     `${SELECT_CON_SALDO} ${incluirArchivadas ? '' : 'WHERE b.archivada = 0'}
-     ORDER BY b.archivada, b.id`,
+     ORDER BY b.archivada, b.favorita DESC, b.id`,
     [],
   );
   return filas.map(aBilletera);
+}
+
+export async function establecerFavorita(db: BaseDatos, id: number, favorita: boolean): Promise<void> {
+  await db.runAsync(`UPDATE billeteras SET favorita = ? WHERE id = ?`, [favorita ? 1 : 0, id]);
 }
 
 export async function obtenerBilletera(db: BaseDatos, id: number): Promise<Billetera | null> {

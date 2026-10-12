@@ -2,17 +2,23 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, FAB, List, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, FAB, List, Menu, Text, useTheme } from 'react-native-paper';
 
-import { CintaTasas } from '../../components/CintaTasas';
-import { ResumenSaldo } from '../../components/ResumenSaldo';
+import { Dona } from '../../components/Dona';
+import { Pastilla, ResumenSaldo } from '../../components/ResumenSaldo';
 import { TarjetaBilletera } from '../../components/TarjetaBilletera';
 import { TarjetaDeuda } from '../../components/TarjetaDeuda';
 import { useTasas } from '../../components/TasasProvider';
-import { crearBilleterasSugeridas, listarBilleteras, type Billetera } from '../../db/billeteras';
-import { ajenoPorBilletera, listarDeudas, type Deuda } from '../../db/deudas';
+import { crearBilleterasSugeridas, establecerFavorita, listarBilleteras, type Billetera } from '../../db/billeteras';
+import { listarCompras, resumenCuotas, type CompraCuotas } from '../../db/cuotas';
+import { ajenoPorBilletera, listarDeudas, resumenDeudas, type Deuda } from '../../db/deudas';
 import { listarMetas, type Meta } from '../../db/metas';
+import { convertir, totalConsolidado } from '../../lib/conversion';
 import { formatearMonto } from '../../lib/moneda';
+
+type Filtro = 'TODAS' | 'BS' | 'DIVISAS';
+type Orden = 'FAVORITAS' | 'SALDO' | 'NOMBRE';
+const NOMBRE_ORDEN: Record<Orden, string> = { FAVORITAS: 'Favoritas primero', SALDO: 'Mayor saldo', NOMBRE: 'Nombre' };
 
 export default function PantallaBilleteras() {
   const db = useSQLiteContext();
@@ -21,19 +27,25 @@ export default function PantallaBilleteras() {
   const [metas, setMetas] = useState<Meta[]>([]);
   // Deudas abiertas: de aquí sale el dinero de otras personas en mis cuentas.
   const [deudas, setDeudas] = useState<Deuda[]>([]);
-  const { tasas, referencia } = useTasas();
+  const [compras, setCompras] = useState<CompraCuotas[]>([]);
+  const { tasas, referencia, cambio, monedaBase } = useTasas();
+  const [filtro, setFiltro] = useState<Filtro>('TODAS');
+  const [orden, setOrden] = useState<Orden>('FAVORITAS');
+  const [menuOrden, setMenuOrden] = useState(false);
   const [verArchivadas, setVerArchivadas] = useState(false);
   const [creando, setCreando] = useState(false);
 
   const cargar = useCallback(async () => {
-    const [b, m, d] = await Promise.all([
+    const [b, m, d, c] = await Promise.all([
       listarBilleteras(db, { incluirArchivadas: true }),
       listarMetas(db),
       listarDeudas(db, { incluirCerradas: false }),
+      listarCompras(db),
     ]);
     setBilleteras(b);
     setMetas(m);
     setDeudas(d);
+    setCompras(c);
   }, [db]);
 
   useFocusEffect(
@@ -68,20 +80,111 @@ export default function PantallaBilleteras() {
     .map((b) => ({ billetera: b, personas: ajenas.filter((d) => d.billetera_id === b.id) }))
     .filter((g) => g.personas.length > 0);
 
+  // Lo mío de cada billetera, en la moneda elegida (para ordenar y para la dona).
+  const enBase = (b: Billetera) => convertir(b.saldo - (ajenoPor.get(b.id) ?? 0), b.moneda, monedaBase, cambio);
+  const filtradas = activas
+    .filter((b) => filtro === 'TODAS' || (filtro === 'BS' ? b.moneda === 'BS' : b.moneda !== 'BS'))
+    .sort((a, b) => {
+      if (orden === 'NOMBRE') return a.nombre.localeCompare(b.nombre, 'es');
+      if (orden === 'SALDO') return (enBase(b) ?? 0) - (enBase(a) ?? 0);
+      return Number(b.favorita) - Number(a.favorita);
+    });
+  const segmentos = filtradas
+    .map((b) => ({ id: b.id, nombre: b.nombre, color: b.color_hex, valor: Math.max(enBase(b) ?? 0, 0) }))
+    .filter((x) => x.valor > 0);
+  const totalFiltrado = segmentos.reduce((s, x) => s + x.valor, 0);
+
+  // Lo que tengo (billeteras, aparte incluidas, y metas; sin lo de otros), lo que debo y el neto.
+  const deMi = activas.map((b) => ({ moneda: b.moneda, saldo: b.saldo - (ajenoPor.get(b.id) ?? 0) }));
+  const tengo = totalConsolidado([...deMi, ...metas.filter((m) => !m.archivada)], monedaBase, cambio);
+  const rd = resumenDeudas(deudas, cambio);
+  const cuotasUsd = resumenCuotas(compras, null).usado;
+  const debo = convertir(rd.debo + cuotasUsd, 'USD', monedaBase, cambio);
+  const meDeben = convertir(rd.meDeben, 'USD', monedaBase, cambio);
+  const neto = tengo !== null && debo !== null && meDeben !== null ? tengo + meDeben - debo : null;
+
+  const alternarFavorita = async (b: Billetera) => {
+    await establecerFavorita(db, b.id, !b.favorita);
+    await cargar();
+  };
+
   return (
     <>
       <FlatList
-        data={activas}
+        data={filtradas}
         keyExtractor={(b) => String(b.id)}
         renderItem={({ item }) => (
-          <TarjetaBilletera billetera={item} deOtros={ajenoPor.get(item.id)} onPress={() => abrir(item)} />
+          <TarjetaBilletera
+            billetera={item}
+            deOtros={ajenoPor.get(item.id)}
+            onPress={() => abrir(item)}
+            onFavorita={() => alternarFavorita(item).catch((e) => Alert.alert('Error', String(e)))}
+          />
         )}
         contentContainerStyle={{ paddingTop: 8, paddingBottom: 96 }}
         ListHeaderComponent={
-          <>
-            <CintaTasas />
-            {activas.length > 0 && <ResumenSaldo billeteras={activas} metas={metas} deudas={deudas} />}
-          </>
+          activas.length > 0 ? (
+            <View style={styles.cabecera}>
+              <ResumenSaldo billeteras={activas} metas={metas} deudas={deudas} />
+
+              <View style={[styles.patrimonio, { backgroundColor: tema.colors.surfaceVariant }]}>
+                <Cifra titulo="Tengo" valor={tengo} moneda={monedaBase} />
+                <Cifra titulo="Debo" valor={debo} moneda={monedaBase} rojo />
+                <Cifra titulo="Neto" valor={neto} moneda={monedaBase} fuerte />
+              </View>
+              <Text variant="bodySmall" style={[styles.nota, { color: tema.colors.onSurfaceVariant }]}>
+                {`Tengo: billeteras y metas, sin lo de otros. Debo: deudas y cuotas de Cashea. El neto suma lo que te deben${
+                  meDeben ? ` (${formatearMonto(meDeben, monedaBase)})` : ''
+                }.`}
+              </Text>
+
+              <View style={styles.filtros}>
+                <Pastilla texto="Todas" elegida={filtro === 'TODAS'} onPress={() => setFiltro('TODAS')} />
+                <Pastilla texto="Bolívares" elegida={filtro === 'BS'} onPress={() => setFiltro('BS')} />
+                <Pastilla texto="Divisas" elegida={filtro === 'DIVISAS'} onPress={() => setFiltro('DIVISAS')} />
+              </View>
+
+              {segmentos.length > 0 && (
+                <View style={[styles.caja, { backgroundColor: tema.colors.surfaceVariant }]}>
+                  <Dona
+                    segmentos={segmentos}
+                    titulo={filtro === 'TODAS' ? 'Total' : filtro === 'BS' ? 'En bolívares' : 'En divisas'}
+                    valorCentro={formatearMonto(totalFiltrado, monedaBase)}
+                    formatear={(v) => formatearMonto(v, monedaBase)}
+                    tamano={180}
+                    leyenda={false}
+                  />
+                </View>
+              )}
+
+              <View style={styles.filaOrden}>
+                <Text variant="bodyMedium" style={[styles.flex, { color: tema.colors.onSurfaceVariant }]}>
+                  {`${filtradas.length} ${filtradas.length === 1 ? 'billetera' : 'billeteras'}`}
+                </Text>
+                <Menu
+                  visible={menuOrden}
+                  onDismiss={() => setMenuOrden(false)}
+                  anchor={
+                    <Button mode="outlined" compact icon="sort" onPress={() => setMenuOrden(true)}>
+                      Ordenar
+                    </Button>
+                  }
+                >
+                  {(Object.keys(NOMBRE_ORDEN) as Orden[]).map((o) => (
+                    <Menu.Item
+                      key={o}
+                      title={NOMBRE_ORDEN[o]}
+                      leadingIcon={orden === o ? 'check' : undefined}
+                      onPress={() => {
+                        setOrden(o);
+                        setMenuOrden(false);
+                      }}
+                    />
+                  ))}
+                </Menu>
+              </View>
+            </View>
+          ) : null
         }
         ListEmptyComponent={
           <View style={styles.vacio}>
@@ -161,6 +264,14 @@ export default function PantallaBilleteras() {
 
 const styles = StyleSheet.create({
   cargando: { marginTop: 48 },
+  flex: { flex: 1 },
+  cabecera: { gap: 12, paddingBottom: 4 },
+  patrimonio: { flexDirection: 'row', marginHorizontal: 16, borderRadius: 22, paddingVertical: 14 },
+  nota: { marginHorizontal: 20, marginTop: -6 },
+  filtros: { flexDirection: 'row', gap: 8, paddingHorizontal: 16 },
+  caja: { marginHorizontal: 16, borderRadius: 24, padding: 16 },
+  filaOrden: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 },
+  cifra: { flex: 1, alignItems: 'center', gap: 2 },
   subtitulo: { marginHorizontal: 16, marginTop: 8 },
   explicacion: { marginHorizontal: 16, marginBottom: 8 },
   vacio: { padding: 24, gap: 12, marginTop: 32 },
@@ -168,3 +279,38 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', right: 16 },
   nueva: { marginHorizontal: 16, marginBottom: 12 },
 });
+
+function Cifra({
+  titulo,
+  valor,
+  moneda,
+  rojo = false,
+  fuerte = false,
+}: {
+  titulo: string;
+  valor: number | null;
+  moneda: Parameters<typeof formatearMonto>[1];
+  rojo?: boolean;
+  fuerte?: boolean;
+}) {
+  const tema = useTheme();
+  return (
+    <View style={styles.cifra}>
+      <Text variant="labelMedium" style={{ color: tema.colors.onSurfaceVariant }}>
+        {titulo}
+      </Text>
+      <Text
+        variant="titleSmall"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        style={{
+          fontWeight: fuerte ? '800' : '600',
+          fontVariant: ['tabular-nums'],
+          color: rojo && valor ? tema.colors.error : fuerte ? tema.colors.primary : tema.colors.onSurface,
+        }}
+      >
+        {valor !== null ? formatearMonto(valor, moneda) : '—'}
+      </Text>
+    </View>
+  );
+}

@@ -8,6 +8,8 @@ import { AccesosRapidos } from '../../components/AccesosRapidos';
 import { AvisosDetectados } from '../../components/AvisosDetectados';
 import { CintaTasas } from '../../components/CintaTasas';
 import { DialogoDictado } from '../../components/DialogoDictado';
+import { Dona } from '../../components/Dona';
+import { CLAVE_GUIA, GuiaBienvenida } from '../../components/GuiaBienvenida';
 import { BarrasPresupuesto } from '../../components/BarrasPresupuesto';
 import { GastosDeCategoria } from '../../components/GastosDeCategoria';
 import { GraficoLineas } from '../../components/GraficoLineas';
@@ -25,6 +27,7 @@ import { listarCategorias, type Categoria } from '../../db/categorias';
 import { ajenoPorBilletera, listarDeudas, type Deuda } from '../../db/deudas';
 import { listarMetas, type Meta } from '../../db/metas';
 import { listarPlantillas, type Plantilla } from '../../db/plantillas';
+import { guardarPreferencia, leerPreferencia } from '../../db/preferencias';
 import { estadoPresupuestos, listarPresupuestos, type Presupuesto } from '../../db/presupuestos';
 import { procesarRecurrentes, type Recurrente } from '../../db/recurrentes';
 import { listarMovimientos, type Movimiento } from '../../db/movimientos';
@@ -98,6 +101,12 @@ export default function PantallaInicio() {
   // Escala de los gráficos: por día, por semana o por mes.
   const [escala, setEscala] = useState<Escala>('mes');
   const [dictando, setDictando] = useState(false);
+  // La guía de bienvenida sale la primera vez (o cuando se pide desde Ajustes).
+  const [guia, setGuia] = useState(false);
+  const terminarGuia = () => {
+    setGuia(false);
+    guardarPreferencia(db, CLAVE_GUIA, '1').catch(() => {});
+  };
   // Los gráficos terminan hoy si se ve el mes actual; si no, el último día del mes elegido.
   const fin = useMemo(() => {
     const hoy = new Date();
@@ -163,9 +172,12 @@ export default function PantallaInicio() {
   useFocusEffect(
     useCallback(() => {
       cargar().catch((e) => Alert.alert('Error', String(e)));
+      leerPreferencia(db, CLAVE_GUIA)
+        .then((v) => setGuia(v === null))
+        .catch(() => {});
       // Al salir de Inicio, los saldos guardados aparte se vuelven a ocultar.
       return () => setVisibles(new Set());
-    }, [cargar]),
+    }, [cargar, db]),
   );
 
   const reporte = useMemo(() => {
@@ -200,6 +212,7 @@ export default function PantallaInicio() {
         <Button mode="contained" icon="wallet-plus" onPress={() => router.navigate('/billeteras')}>
           Ir a Billeteras
         </Button>
+        <GuiaBienvenida visible={guia} onTerminar={terminarGuia} />
       </View>
     );
   }
@@ -342,7 +355,23 @@ export default function PantallaInicio() {
 
           <Card mode="contained">
             <Card.Title title="Gastos por categoría" subtitle="Toca una para ver sus gastos" />
-            <Card.Content>
+            <Card.Content style={styles.categorias}>
+              {resumen.gastos > 0 && (
+                <Dona
+                  segmentos={(() => {
+                    const lista = resumen.gastosPorCategoria;
+                    const resto = lista.slice(6).reduce((suma, c) => suma + c.total, 0);
+                    return [
+                      ...lista.slice(0, 6).map((c) => ({ id: c.id, nombre: c.nombre, color: c.color, valor: c.total })),
+                      ...(resto > 0 ? [{ id: -1, nombre: 'Otras', color: '#6B7280', valor: resto }] : []),
+                    ];
+                  })()}
+                  titulo="Gastado"
+                  valorCentro={formatearMonto(resumen.gastos, monedaBase)}
+                  formatear={(v) => formatearMonto(v, monedaBase)}
+                  leyenda={false}
+                />
+              )}
               <BarrasCategorias
                 categorias={resumen.gastosPorCategoria}
                 moneda={monedaBase}
@@ -415,6 +444,7 @@ export default function PantallaInicio() {
       </ScrollView>
       <FAB icon="plus" accessibilityLabel="Nuevo movimiento" style={styles.fab} onPress={() => router.push('/movimiento/nuevo')} />
       <DialogoDictado visible={dictando} onCerrar={() => setDictando(false)} />
+      <GuiaBienvenida visible={guia} onTerminar={terminarGuia} />
     </View>
   );
 }
@@ -447,5 +477,6 @@ const styles = StyleSheet.create({
   kpi: { gap: 4 },
   muestra: { width: 10, height: 10, borderRadius: 2 },
   balance: { gap: 2 },
+  categorias: { gap: 16 },
   fab: { position: 'absolute', right: 16, bottom: 16, borderRadius: 999 },
 });
