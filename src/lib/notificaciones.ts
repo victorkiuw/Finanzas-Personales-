@@ -85,7 +85,7 @@ export async function notificarAhora(titulo: string, cuerpo: string): Promise<vo
  */
 export async function programarAvisos(
   prefijo: string,
-  avisos: { id: string; titulo: string; cuerpo: string; cuando: Date }[],
+  avisos: { id: string; titulo: string; cuerpo: string; cuando: Date; ruta?: string }[],
 ): Promise<void> {
   const programadas = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
@@ -98,7 +98,8 @@ export async function programarAvisos(
     if (a.cuando.getTime() <= ahora) continue;
     await Notifications.scheduleNotificationAsync({
       identifier: `${prefijo}${a.id}`,
-      content: { title: a.titulo, body: a.cuerpo },
+      // Al tocar el aviso se abre esta pantalla de la app (ver _layout).
+      content: { title: a.titulo, body: a.cuerpo, data: a.ruta ? { ruta: a.ruta } : {} },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: a.cuando, channelId: CANAL },
     });
   }

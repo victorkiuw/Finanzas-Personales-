@@ -1,6 +1,6 @@
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, StyleSheet, View } from 'react-native';
 import { Button, Card, Text, useTheme } from 'react-native-paper';
 
@@ -26,7 +26,7 @@ import { fechaSimpleLegible, formatearFechaCorta } from '../../lib/fechas';
 import { formatearMonto } from '../../lib/moneda';
 
 export default function DetalleDeuda() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, cobrar } = useLocalSearchParams<{ id: string; cobrar?: string }>();
   const deudaId = Number(id);
   const db = useSQLiteContext();
   const tema = useTheme();
@@ -84,6 +84,14 @@ export default function DetalleDeuda() {
   };
 
   const meDeben = deuda?.tipo === 'ME_DEBEN';
+  // Desde el aviso del día de cobro (?cobrar=1): se abre WhatsApp con el mensaje ya escrito, una sola vez.
+  const yaCobrado = useRef(false);
+  useEffect(() => {
+    if (cobrar === '1' && deuda && meDeben && !deuda.cerrada && deuda.pendiente > 0 && !yaCobrado.current) {
+      yaCobrado.current = true;
+      recordarPorWhatsApp();
+    }
+  }, [cobrar, deuda]);
 
   /** Abre WhatsApp con un mensaje amable y el monto de hoy, para elegir a quién enviarlo. */
   const recordarPorWhatsApp = () => {

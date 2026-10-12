@@ -67,6 +67,7 @@ export async function actualizarAvisosVencimientos(db: BaseDatos): Promise<void>
         titulo: `Mañana vence tu cuota de ${c.comercio}`,
         cuerpo: `Cuota ${q.numero} de ${c.cuotas}: ${formatearMonto(q.monto, 'USD')}.`,
         cuando: nueveDe(q.fecha, -1),
+        ruta: `/cuota/${c.id}`,
       })),
   );
   await programarAvisos('cuota-', cuotas);
@@ -77,8 +78,21 @@ export async function actualizarAvisosVencimientos(db: BaseDatos): Promise<void>
       const meDeben = d.tipo === 'ME_DEBEN';
       const que = meDeben ? `${d.persona} te debe ${formatearMonto(d.pendiente, d.unidad)}` : `Le debes ${formatearMonto(d.pendiente, d.unidad)} a ${d.persona}`;
       return [
-        { id: `${d.id}-antes`, titulo: meDeben ? 'Mañana toca cobrar' : 'Mañana toca pagar', cuerpo: `${que}.`, cuando: nueveDe(d.fecha_limite!, -1) },
-        { id: `${d.id}-dia`, titulo: meDeben ? 'Hoy toca cobrar' : 'Hoy toca pagar', cuerpo: `${que}. Toca para enviarle un recordatorio.`, cuando: nueveDe(d.fecha_limite!) },
+        {
+          id: `${d.id}-antes`,
+          titulo: meDeben ? 'Mañana toca cobrar' : 'Mañana toca pagar',
+          cuerpo: `${que}.`,
+          cuando: nueveDe(d.fecha_limite!, -1),
+          ruta: `/deuda/${d.id}`,
+        },
+        {
+          id: `${d.id}-dia`,
+          titulo: meDeben ? 'Hoy toca cobrar' : 'Hoy toca pagar',
+          cuerpo: meDeben ? `${que}. Toca para enviarle el recordatorio por WhatsApp, ya escrito.` : `${que}.`,
+          cuando: nueveDe(d.fecha_limite!),
+          // Si te deben, se abre la deuda y el mensaje de WhatsApp listo para enviar.
+          ruta: meDeben ? `/deuda/${d.id}?cobrar=1` : `/deuda/${d.id}`,
+        },
       ];
     }),
   );

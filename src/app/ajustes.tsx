@@ -166,6 +166,7 @@ export default function PantallaAjustes() {
             ['¿Me alcanza?', 'Cuánto es un precio en cada moneda y cuánto te queda', 'cash-check', '/me-alcanza'],
             ['Retos de ahorro', 'Racha de días sin gastar y reto de 52 semanas', 'fire', '/retos'],
             ['Etiquetas', 'Totales de #viaje, #moto… escritas en las notas', 'pound', '/etiquetas'],
+            ['Resumen del mes', 'Una imagen con tu mes para compartir o guardar', 'image-outline', '/resumen-mes'],
           ] as const
         ).map(([titulo, descripcion, icono, ruta]) => (
           <List.Item

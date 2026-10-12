@@ -22,6 +22,7 @@ export function Dona({
   tamano = 200,
   grosor = 26,
   leyenda = true,
+  colorTexto,
 }: {
   segmentos: Segmento[];
   titulo: string;
@@ -30,6 +31,8 @@ export function Dona({
   tamano?: number;
   grosor?: number;
   leyenda?: boolean;
+  /** Color del texto del centro (por defecto, el del tema). */
+  colorTexto?: string;
 }) {
   const tema = useTheme();
   const positivos = segmentos.filter((s) => s.valor > 0);
@@ -84,10 +87,10 @@ export function Dona({
           </G>
         </Svg>
         <View style={[StyleSheet.absoluteFill, styles.centro]} pointerEvents="none">
-          <Text variant="labelMedium" style={{ color: tema.colors.onSurfaceVariant }}>
+          <Text variant="labelMedium" style={{ color: colorTexto ?? tema.colors.onSurfaceVariant, opacity: colorTexto ? 0.75 : 1 }}>
             {titulo}
           </Text>
-          <Text variant="titleMedium" style={styles.valor} numberOfLines={1} adjustsFontSizeToFit>
+          <Text variant="titleMedium" style={[styles.valor, colorTexto ? { color: colorTexto } : null]} numberOfLines={1} adjustsFontSizeToFit>
             {valorCentro}
           </Text>
         </View>

@@ -23,6 +23,7 @@
       "allowBackup": true
     },
     "plugins": [
+      "./plugins/atajos-android.js",
       "expo-router",
       "expo-sqlite",
       "expo-notifications",
@@ -49,7 +50,7 @@
               "name": "Resumen",
               "label": "Finanzas: disponible y tasas",
               "minWidth": "250dp",
-              "minHeight": "110dp",
+              "minHeight": "140dp",
               "targetCellWidth": 4,
               "targetCellHeight": 2,
               "description": "Tu dinero disponible y las tasas BCV, USDT y euro del día",

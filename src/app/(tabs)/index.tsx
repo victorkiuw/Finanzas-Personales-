@@ -381,6 +381,9 @@ export default function PantallaInicio() {
               <TarjetasFlujo ingresos={resumen.ingresos} gastos={resumen.gastos} moneda={monedaBase} />
             </View>
           </DeslizarMes>
+          <Button mode="outlined" icon="image-outline" style={styles.izquierda} onPress={() => router.push('/resumen-mes')}>
+            Compartir resumen del mes
+          </Button>
           <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
             {`Montos en ${NOMBRE_MONEDA_BASE[monedaBase]}, cada movimiento convertido con la tasa ${NOMBRE_PAR[referencia]} de su día. No incluye transferencias ni metas.`}
             {resumen.incompleto ? ' Faltan tasas para convertir algunos movimientos en Bs.' : ''}

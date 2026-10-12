@@ -1,7 +1,8 @@
-import { Stack } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
@@ -14,6 +15,21 @@ import { actualizarAvisosRecurrentes, actualizarAvisosVencimientos, enviarResume
 import { configurarNotificaciones } from '../lib/notificaciones';
 import { hacerCopiaAutomatica } from '../lib/respaldoAuto';
 import { temaClaro, temaOscuro } from '../lib/tema';
+
+/** Al tocar un aviso que trae una pantalla (deuda que vence, cuota…), se abre esa pantalla. */
+function AbrirDesdeAviso() {
+  const respuesta = Notifications.useLastNotificationResponse();
+  const abierta = useRef<string | null>(null);
+  useEffect(() => {
+    const id = respuesta?.notification.request.identifier;
+    const ruta = respuesta?.notification.request.content.data?.ruta;
+    if (!id || typeof ruta !== 'string' || abierta.current === id) return;
+    abierta.current = id;
+    // Un instante para que el navegador esté listo al abrir la app desde el aviso.
+    setTimeout(() => router.push(ruta as never), 300);
+  }, [respuesta]);
+  return null;
+}
 
 /** Tareas al abrir la app que necesitan la base de datos. */
 function Arranque() {
@@ -38,6 +54,7 @@ export default function RootLayout() {
   return (
     <SQLiteProvider databaseName={NOMBRE_BD} onInit={migrar}>
       <Arranque />
+      <AbrirDesdeAviso />
       <TasasProvider>
         <PaperProvider theme={tema}>
           <StatusBar style={tema.dark ? 'light' : 'dark'} />
