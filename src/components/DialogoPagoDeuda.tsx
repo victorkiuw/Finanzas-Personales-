@@ -4,7 +4,7 @@ import { Keyboard, ScrollView, StyleSheet, useWindowDimensions, View } from 'rea
 import { Button, Chip, Dialog, HelperText, Portal, Text, TextInput } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
-import { devolverAAjeno, obtenerDeuda, registrarPagoDeuda, type Deuda } from '../db/deudas';
+import { devolverAAjeno, obtenerDeuda, pendienteExacto, registrarPagoDeuda, type Deuda } from '../db/deudas';
 import { centimosATexto, equivalentes, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
 import { calcularTasa, enviadoConTasa, parsearTasa, recibidoConTasa, tasaATexto, unidadTasa } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
@@ -127,7 +127,7 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
       return;
     }
     // Inverso de recibidoConTasa: cuánto hay que mover en la billetera para cubrir lo pendiente.
-    const necesario = enviadoConTasa(de, a, deuda.pendiente, tasa);
+    const necesario = enviadoConTasa(de, a, pendienteExacto(deuda), tasa);
     setMontoTexto(centimosATexto(necesario));
     setEquivalenteTexto(centimosATexto(deuda.pendiente));
     setError(null);

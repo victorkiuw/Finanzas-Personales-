@@ -89,6 +89,17 @@ export function totalEnUnidad(monto: number, moneda: Moneda, tasaReferencia: num
   return moneda === 'BS' ? Math.round(monto / tasaReferencia) : monto;
 }
 
+/**
+ * Lo que falta, en la unidad de la deuda pero sin redondear a céntimos de
+ * dólar: si presté Bs. 1.501 a 875,65 son $1,7141…, no $1,71. Sirve para
+ * pasarlo de vuelta a bolívares sin perder nada (Bs. 1.501 y no 1.497,36).
+ */
+export function pendienteExacto(d: Pick<Deuda, 'monto' | 'moneda' | 'tasa_referencia' | 'total' | 'pagado' | 'pendiente' | 'cerrada'>): number {
+  if (d.cerrada || d.pendiente === 0) return 0;
+  const total = d.tasa_referencia && d.moneda === 'BS' ? d.monto / d.tasa_referencia : d.total;
+  return Math.max(total - d.pagado, 0);
+}
+
 interface FilaDeuda {
   id: number;
   tipo: TipoDeuda;

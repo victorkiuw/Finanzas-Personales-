@@ -9,6 +9,7 @@ import {
   eliminarDeuda,
   listarDeudas,
   obtenerDeuda,
+  pendienteExacto,
   registrarPagoDeuda,
   resumenDeudas,
 } from '../src/db/deudas';
@@ -219,4 +220,15 @@ test('dividir un gasto: tu parte es gasto y la de los demás, préstamos', async
     dividirGasto(db, { tipo: 'GASTO', monto: 1000, fecha: hoy, billetera_origen_id: banco, categoria_id: comida.id }, [{ persona: 'X', monto: 1000 }], null),
     /suman más/,
   );
+});
+
+test('lo pendiente exacto no pierde bolívares por redondear a céntimos de dólar', () => {
+  // Bs. 1.501 a 875,65 = $1,7141…; con el total redondeado ($1,71) volvería como Bs. 1.497,36.
+  const base = { monto: 150100, moneda: 'BS' as const, tasa_referencia: 875.65, total: 171, cerrada: false };
+  assert.equal(Math.round(pendienteExacto({ ...base, pagado: 0, pendiente: 171 }) * 875.65), 150100);
+  // Con un abono de $1 queda lo justo.
+  assert.equal(Math.round(pendienteExacto({ ...base, pagado: 100, pendiente: 71 }) * 875.65), 150100 - 87565);
+  assert.equal(pendienteExacto({ ...base, pagado: 171, pendiente: 0 }), 0);
+  // Sin indexar es el pendiente tal cual.
+  assert.equal(pendienteExacto({ monto: 5000, moneda: 'USD', tasa_referencia: null, total: 5000, pagado: 1000, pendiente: 4000, cerrada: false }), 4000);
 });

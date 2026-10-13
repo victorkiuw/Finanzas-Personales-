@@ -16,6 +16,7 @@ import {
   listarAjustes,
   listarDeudas,
   obtenerDeuda,
+  pendienteExacto,
   type AjusteDeuda,
   type Deuda,
 } from '../../db/deudas';
@@ -96,7 +97,7 @@ export default function DetalleDeuda() {
   /** Abre WhatsApp con un mensaje amable y el monto de hoy, para elegir a quién enviarlo. */
   const recordarPorWhatsApp = () => {
     if (!deuda) return;
-    const bs = deuda.moneda === 'BS' && deuda.unidad !== 'BS' ? convertir(deuda.pendiente, deuda.unidad, 'BS', cambioDe(tasas, referencia)) : null;
+    const bs = deuda.moneda === 'BS' && deuda.unidad !== 'BS' ? convertir(pendienteExacto(deuda), deuda.unidad, 'BS', cambioDe(tasas, referencia)) : null;
     const monto = bs !== null
       ? `${formatearMonto(bs, 'BS')} (${formatearMonto(deuda.pendiente, deuda.unidad)} a tasa ${NOMBRE_PAR[referencia]} de hoy)`
       : formatearMonto(deuda.pendiente, deuda.unidad);

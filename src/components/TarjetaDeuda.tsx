@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { Card, IconButton, ProgressBar, Text, useTheme } from 'react-native-paper';
 
-import type { Deuda } from '../db/deudas';
+import { pendienteExacto, type Deuda } from '../db/deudas';
 import { cambioDe, type Tasas } from '../db/tasas';
 import { NOMBRE_PAR, PARES, type ParDolar } from '../lib/api-tasas';
 import { convertir } from '../lib/conversion';
@@ -20,9 +20,9 @@ function enBolivaresAlDia(d: Deuda): boolean {
   return d.moneda === 'BS' && d.unidad !== 'BS';
 }
 
-/** Bs. que hay que pagar hoy por `monto` (en la unidad de la deuda) con la tasa indicada. */
-function bolivaresHoy(monto: number, d: Deuda, tasas: Tasas, par: ParDolar): number | null {
-  return convertir(monto, d.unidad, 'BS', cambioDe(tasas, par));
+/** Bs. que hay que pagar hoy por lo pendiente con la tasa indicada. */
+function bolivaresHoy(d: Deuda, tasas: Tasas, par: ParDolar): number | null {
+  return convertir(pendienteExacto(d), d.unidad, 'BS', cambioDe(tasas, par));
 }
 
 interface Props {
@@ -44,9 +44,9 @@ export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: P
   const suave = { color: tema.colors.onSurfaceVariant };
   const meDeben = d.tipo === 'ME_DEBEN';
   const alDia = enBolivaresAlDia(d);
-  const pendienteBs = alDia ? bolivaresHoy(d.pendiente, d, tasas, referencia) : null;
+  const pendienteBs = alDia ? bolivaresHoy(d, tasas, referencia) : null;
   const otra = PARES.find((p) => p !== referencia)!;
-  const pendienteOtra = alDia ? bolivaresHoy(d.pendiente, d, tasas, otra) : null;
+  const pendienteOtra = alDia ? bolivaresHoy(d, tasas, otra) : null;
 
   const fechaCorta = formatearFechaCorta(new Date(d.fecha));
   if (d.ajeno) {
