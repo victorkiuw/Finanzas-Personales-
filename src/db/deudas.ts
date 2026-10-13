@@ -1,3 +1,4 @@
+import type { ParDolar } from '../lib/api-tasas';
 import { convertir, type Cambio } from '../lib/conversion';
 import { equivalentes, esMoneda, INFO_MONEDA, type Moneda } from '../lib/moneda';
 import { calcularTasa } from '../lib/tasa';
@@ -36,6 +37,8 @@ export interface Deuda {
   monto: number;
   /** Bs. por USD con que se valoró el préstamo; si existe, la deuda va en dólares. */
   tasa_referencia: number | null;
+  /** Tasa con la que se calcula hoy cuántos bolívares son (BCV o USDT), elegida en la deuda. */
+  par: ParDolar;
   fecha: string;
   fecha_limite: string | null;
   nota: string | null;
@@ -63,6 +66,8 @@ export interface DatosDeuda {
   moneda: Moneda;
   monto: number;
   tasa_referencia?: number | null;
+  /** Tasa para cobrar hoy (por defecto BCV). */
+  par?: ParDolar;
   fecha: string;
   fecha_limite?: string | null;
   nota?: string | null;
@@ -107,6 +112,7 @@ interface FilaDeuda {
   moneda: Moneda;
   monto: number;
   tasa_referencia: number | null;
+  par: ParDolar;
   fecha: string;
   fecha_limite: string | null;
   nota: string | null;
@@ -119,7 +125,7 @@ interface FilaDeuda {
 }
 
 const SELECT_DEUDA = `
-  SELECT d.id, d.tipo, d.persona, d.moneda, d.monto, d.tasa_referencia, d.fecha, d.fecha_limite, d.nota, d.cerrada,
+  SELECT d.id, d.tipo, d.persona, d.moneda, d.monto, d.tasa_referencia, d.par, d.fecha, d.fecha_limite, d.nota, d.cerrada,
     d.ajeno, d.billetera_id, b.nombre AS billetera_nombre, d.origen_ajeno_id,
     COALESCE((SELECT SUM(t.monto_destino) FROM transacciones t
               WHERE t.deuda_id = d.id AND t.tipo IN ('COBRO_DEUDA', 'PAGO_DEUDA')), 0)
@@ -169,7 +175,7 @@ async function validarDeuda(
   db: BaseDatos,
   d: DatosDeuda,
   billeteraPermitida: number | null = null,
-): Promise<{ persona: string; tasa: number | null; total: number }> {
+): Promise<{ persona: string; tasa: number | null; total: number; par: ParDolar }> {
   const persona = validarTexto(d.persona, d.fecha, d.fecha_limite);
   if (d.tipo !== 'ME_DEBEN' && d.tipo !== 'DEBO') throw new ErrorValidacion('Tipo inválido.');
   if (d.ajeno) {
@@ -193,7 +199,9 @@ async function validarDeuda(
     if (billetera.archivada && d.billetera_id !== billeteraPermitida) throw new ErrorValidacion('La billetera está archivada.');
     if (billetera.moneda !== d.moneda) throw new ErrorValidacion('La billetera debe ser de la misma moneda que el préstamo.');
   }
-  return { persona, tasa, total };
+  const par = d.par ?? 'BCV';
+  if (par !== 'BCV' && par !== 'PARALELO') throw new ErrorValidacion('Tasa inválida.');
+  return { persona, tasa, total, par };
 }
 
 /** Movimiento del préstamo en la billetera (el dinero sale si presté, entra si me prestaron). */
@@ -209,13 +217,13 @@ async function insertarPrestamo(db: BaseDatos, id: number, d: DatosDeuda, total:
 }
 
 export async function crearDeuda(db: BaseDatos, d: DatosDeuda): Promise<number> {
-  const { persona, tasa, total } = await validarDeuda(db, d);
+  const { persona, tasa, total, par } = await validarDeuda(db, d);
   return enTransaccion(db, async () => {
     const r = await db.runAsync(
-      `INSERT INTO deudas (tipo, persona, moneda, monto, tasa_referencia, fecha, fecha_limite, nota, ajeno, billetera_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO deudas (tipo, persona, moneda, monto, tasa_referencia, par, fecha, fecha_limite, nota, ajeno, billetera_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        d.tipo, persona, d.moneda, d.monto, tasa, d.fecha, d.fecha_limite ?? null, d.nota?.trim() || null,
+        d.tipo, persona, d.moneda, d.monto, tasa, par, d.fecha, d.fecha_limite ?? null, d.nota?.trim() || null,
         d.ajeno ? 1 : 0, d.ajeno ? d.billetera_id! : null,
       ],
     );
@@ -261,7 +269,7 @@ export async function actualizarDeuda(db: BaseDatos, id: number, datos: DatosDeu
     d = { ...d, tipo: 'DEBO', billetera_id: null, ajeno: false };
   }
   if (d.ajeno && d.ya_en_saldo === undefined) d = { ...d, ya_en_saldo: await ajenoYaEnSaldo(db, id) };
-  const { persona, tasa, total } = await validarDeuda(db, d, await billeteraDeDeuda(db, id));
+  const { persona, tasa, total, par } = await validarDeuda(db, d, await billeteraDeDeuda(db, id));
 
   const pagos = await db.getFirstAsync<{ n: number }>(
     `SELECT (SELECT COUNT(*) FROM transacciones WHERE deuda_id = ? AND tipo IN ('COBRO_DEUDA', 'PAGO_DEUDA'))
@@ -291,11 +299,11 @@ export async function actualizarDeuda(db: BaseDatos, id: number, datos: DatosDeu
 
   await enTransaccion(db, async () => {
     await db.runAsync(
-      `UPDATE deudas SET tipo = ?, persona = ?, moneda = ?, monto = ?, tasa_referencia = ?, fecha = ?,
+      `UPDATE deudas SET tipo = ?, persona = ?, moneda = ?, monto = ?, tasa_referencia = ?, par = ?, fecha = ?,
          fecha_limite = ?, nota = ?, cerrada = ?, ajeno = ?, billetera_id = ?
        WHERE id = ?`,
       [
-        d.tipo, persona, d.moneda, d.monto, tasa, d.fecha, d.fecha_limite ?? null, d.nota?.trim() || null, cerrada ? 1 : 0,
+        d.tipo, persona, d.moneda, d.monto, tasa, par, d.fecha, d.fecha_limite ?? null, d.nota?.trim() || null, cerrada ? 1 : 0,
         d.ajeno ? 1 : 0, d.ajeno ? d.billetera_id! : null, id,
       ],
     );
@@ -429,6 +437,7 @@ export interface DatosTomarPrestado {
   monto: number;
   /** Solo si es en bolívares: llevar la deuda en dólares a esta tasa. */
   tasa_referencia?: number | null;
+  par?: ParDolar;
   fecha: string;
   nota?: string | null;
 }
@@ -447,15 +456,16 @@ export async function tomarPrestadoDeAjeno(db: BaseDatos, p: DatosTomarPrestado)
     moneda: ajeno.moneda,
     monto: p.monto,
     tasa_referencia: p.tasa_referencia ?? null,
+    par: p.par,
     fecha: p.fecha,
     nota: p.nota ?? `Lo tomé de lo que le guardo${ajeno.billetera_nombre ? ` en ${ajeno.billetera_nombre}` : ''}`,
   };
-  const { persona, tasa } = await validarDeuda(db, datos);
+  const { persona, tasa, par } = await validarDeuda(db, datos);
   return enTransaccion(db, async () => {
     const r = await db.runAsync(
-      `INSERT INTO deudas (tipo, persona, moneda, monto, tasa_referencia, fecha, nota, origen_ajeno_id)
-       VALUES ('DEBO', ?, ?, ?, ?, ?, ?, ?)`,
-      [persona, datos.moneda, datos.monto, tasa, datos.fecha, datos.nota?.trim() || null, ajeno.id],
+      `INSERT INTO deudas (tipo, persona, moneda, monto, tasa_referencia, par, fecha, nota, origen_ajeno_id)
+       VALUES ('DEBO', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [persona, datos.moneda, datos.monto, tasa, par, datos.fecha, datos.nota?.trim() || null, ajeno.id],
     );
     const id = r.lastInsertRowId;
     await db.runAsync(`INSERT INTO ajustes_deuda (deuda_id, monto, fecha, grupo, nota) VALUES (?, ?, ?, ?, ?)`, [

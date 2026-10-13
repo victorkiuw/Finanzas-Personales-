@@ -24,7 +24,9 @@ export function DialogoTomarPrestado({
   onCerrar: (deudaId: number | null) => void;
 }) {
   const db = useSQLiteContext();
-  const { tasas, referencia } = useTasas();
+  const { tasas } = useTasas();
+  // Lo tomado se lleva al dólar BCV (luego se puede cambiar editando la deuda).
+  const referencia = 'BCV' as const;
   const [montoTexto, setMontoTexto] = useState('');
   const [enDolares, setEnDolares] = useState(true);
   const [tasaTexto, setTasaTexto] = useState('');
@@ -39,7 +41,7 @@ export function DialogoTomarPrestado({
     setEnDolares(true);
     const hoy = tasas[referencia]?.tasa;
     setTasaTexto(hoy ? tasaATexto(hoy) : '');
-  }, [visible, tasas, referencia]);
+  }, [visible, tasas]);
 
   const monto = parsearMonto(montoTexto);
   const tasa = parsearTasa(tasaTexto);
@@ -61,6 +63,7 @@ export function DialogoTomarPrestado({
         ajeno_id: ajeno.id,
         monto,
         tasa_referencia: usaTasa ? tasa : null,
+        par: referencia,
         fecha: new Date().toISOString(),
       });
       onCerrar(id);

@@ -67,7 +67,7 @@ export default function PantallaAhorros() {
           data={abiertas}
           keyExtractor={(d) => String(d.id)}
           renderItem={({ item }) => (
-            <TarjetaDeuda deuda={item} tasas={tasas} referencia={referencia} onPress={() => router.push(`/deuda/${item.id}`)} />
+            <TarjetaDeuda deuda={item} tasas={tasas} onPress={() => router.push(`/deuda/${item.id}`)} />
           )}
           contentContainerStyle={{ paddingBottom: 96 }}
           ListHeaderComponent={
@@ -123,7 +123,7 @@ export default function PantallaAhorros() {
                 style={{ backgroundColor: tema.colors.background }}
               >
                 {saldadas.map((d) => (
-                  <TarjetaDeuda key={d.id} deuda={d} tasas={tasas} referencia={referencia} onPress={() => router.push(`/deuda/${d.id}`)} />
+                  <TarjetaDeuda key={d.id} deuda={d} tasas={tasas} onPress={() => router.push(`/deuda/${d.id}`)} />
                 ))}
               </List.Accordion>
             ) : null}

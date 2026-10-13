@@ -429,6 +429,10 @@ const MIGRACIONES: (string | Migracion)[] = [
     creado_en TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   `,
+  // v17: con qué tasa se cobra hoy una deuda en bolívares llevada al dólar (no la que se mire en Inicio).
+  `
+  ALTER TABLE deudas ADD COLUMN par TEXT NOT NULL DEFAULT 'BCV' CHECK (par IN ('BCV', 'PARALELO'));
+  `,
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.length;

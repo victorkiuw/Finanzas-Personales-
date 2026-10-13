@@ -31,7 +31,7 @@ export default function DetalleDeuda() {
   const deudaId = Number(id);
   const db = useSQLiteContext();
   const tema = useTheme();
-  const { tasas, referencia } = useTasas();
+  const { tasas } = useTasas();
   const [deuda, setDeuda] = useState<Deuda | null>(null);
   const [pagando, setPagando] = useState(false);
   const [tomando, setTomando] = useState(false);
@@ -97,9 +97,9 @@ export default function DetalleDeuda() {
   /** Abre WhatsApp con un mensaje amable y el monto de hoy, para elegir a quién enviarlo. */
   const recordarPorWhatsApp = () => {
     if (!deuda) return;
-    const bs = deuda.moneda === 'BS' && deuda.unidad !== 'BS' ? convertir(pendienteExacto(deuda), deuda.unidad, 'BS', cambioDe(tasas, referencia)) : null;
+    const bs = deuda.moneda === 'BS' && deuda.unidad !== 'BS' ? convertir(pendienteExacto(deuda), deuda.unidad, 'BS', cambioDe(tasas, deuda.par)) : null;
     const monto = bs !== null
-      ? `${formatearMonto(bs, 'BS')} (${formatearMonto(deuda.pendiente, deuda.unidad)} a tasa ${NOMBRE_PAR[referencia]} de hoy)`
+      ? `${formatearMonto(bs, 'BS')} (${formatearMonto(deuda.pendiente, deuda.unidad)} a tasa ${NOMBRE_PAR[deuda.par]} de hoy)`
       : formatearMonto(deuda.pendiente, deuda.unidad);
     const texto = `Hola ${deuda.persona}, te escribo para recordarte lo que quedó pendiente: hoy son ${monto}. ¡Gracias!`;
     Linking.openURL(`https://wa.me/?text=${encodeURIComponent(texto)}`).catch(() =>
@@ -135,7 +135,7 @@ export default function DetalleDeuda() {
             <View>
               <Card mode="contained" style={styles.tarjeta}>
                 <Card.Content style={styles.contenido}>
-                  <ResumenDeuda deuda={deuda} tasas={tasas} referencia={referencia} detalle />
+                  <ResumenDeuda deuda={deuda} tasas={tasas} detalle />
                   {deuda.fecha_limite && !deuda.cerrada && (
                     <Text variant="bodySmall" style={{ color: vencida(deuda) ? tema.colors.error : tema.colors.onSurfaceVariant }}>
                       {`${vencida(deuda) ? 'Venció' : 'Debe pagarse antes del'} ${fechaSimpleLegible(deuda.fecha_limite)}`}

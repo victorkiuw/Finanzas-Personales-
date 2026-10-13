@@ -42,7 +42,7 @@ export default function PantallaBilleteras() {
   // Deudas abiertas: de aquí sale el dinero de otras personas en mis cuentas.
   const [deudas, setDeudas] = useState<Deuda[]>([]);
   const [compras, setCompras] = useState<CompraCuotas[]>([]);
-  const { tasas, referencia, cambio, monedaBase, actualizar } = useTasas();
+  const { tasas, cambio, monedaBase, actualizar } = useTasas();
   const [refrescando, setRefrescando] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('TODAS');
   const [orden, setOrden] = useState<Orden>('PROPIO');
@@ -278,7 +278,7 @@ export default function PantallaBilleteras() {
                       {`${g.billetera.nombre} · tuyo: ${formatearMonto(g.billetera.saldo - (ajenoPor.get(g.billetera.id) ?? 0), g.billetera.moneda)}`}
                     </Text>
                     {g.personas.map((d) => (
-                      <TarjetaDeuda key={d.id} deuda={d} tasas={tasas} referencia={referencia} onPress={() => router.push(`/deuda/${d.id}`)} />
+                      <TarjetaDeuda key={d.id} deuda={d} tasas={tasas} onPress={() => router.push(`/deuda/${d.id}`)} />
                     ))}
                   </View>
                 ))}

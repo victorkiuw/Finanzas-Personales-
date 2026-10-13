@@ -232,3 +232,15 @@ test('lo pendiente exacto no pierde bolívares por redondear a céntimos de dól
   // Sin indexar es el pendiente tal cual.
   assert.equal(pendienteExacto({ monto: 5000, moneda: 'USD', tasa_referencia: null, total: 5000, pagado: 1000, pendiente: 4000, cerrada: false }), 4000);
 });
+
+test('cada deuda guarda con qué tasa se cobra (BCV por defecto)', async () => {
+  const { db } = await preparar();
+  const a = await crearDeuda(db, { tipo: 'ME_DEBEN', persona: 'Guillermo', moneda: 'BS', monto: 150100, tasa_referencia: 875.65, fecha: hoy });
+  assert.equal((await obtenerDeuda(db, a))!.par, 'BCV');
+  const b = await crearDeuda(db, {
+    tipo: 'ME_DEBEN', persona: 'Ana', moneda: 'BS', monto: 100000, tasa_referencia: 1000, par: 'PARALELO', fecha: hoy,
+  });
+  assert.equal((await obtenerDeuda(db, b))!.par, 'PARALELO');
+  await actualizarDeuda(db, b, { tipo: 'ME_DEBEN', persona: 'Ana', moneda: 'BS', monto: 100000, tasa_referencia: 1000, par: 'BCV', fecha: hoy });
+  assert.equal((await obtenerDeuda(db, b))!.par, 'BCV');
+});

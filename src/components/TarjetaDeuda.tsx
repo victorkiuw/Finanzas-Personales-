@@ -28,7 +28,6 @@ function bolivaresHoy(d: Deuda, tasas: Tasas, par: ParDolar): number | null {
 interface Props {
   deuda: Deuda;
   tasas: Tasas;
-  referencia: ParDolar;
   /** Con la equivalencia en la otra tasa (pantalla de la deuda). */
   detalle?: boolean;
 }
@@ -39,7 +38,9 @@ interface Props {
  * cuenta en dólares, lo grande es cuántos bolívares hay que pagar hoy (con la
  * tasa elegida en Inicio) y debajo su valor en dólares.
  */
-export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: Props) {
+export function ResumenDeuda({ deuda: d, tasas, detalle = false }: Props) {
+  // Cada deuda se cobra con la tasa que se le eligió (BCV por defecto), no con la que se mira en Inicio.
+  const referencia = d.par;
   const tema = useTheme();
   const suave = { color: tema.colors.onSurfaceVariant };
   const meDeben = d.tipo === 'ME_DEBEN';
@@ -119,7 +120,7 @@ export function ResumenDeuda({ deuda: d, tasas, referencia, detalle = false }: P
   );
 }
 
-export function TarjetaDeuda({ deuda, tasas, referencia, onPress }: Omit<Props, 'detalle'> & { onPress: () => void }) {
+export function TarjetaDeuda({ deuda, tasas, onPress }: Omit<Props, 'detalle'> & { onPress: () => void }) {
   const tema = useTheme();
   const vence = deuda.fecha_limite && !deuda.cerrada;
   return (
@@ -144,7 +145,7 @@ export function TarjetaDeuda({ deuda, tasas, referencia, onPress }: Omit<Props, 
         )}
       />
       <Card.Content>
-        <ResumenDeuda deuda={deuda} tasas={tasas} referencia={referencia} />
+        <ResumenDeuda deuda={deuda} tasas={tasas} />
       </Card.Content>
     </Card>
   );

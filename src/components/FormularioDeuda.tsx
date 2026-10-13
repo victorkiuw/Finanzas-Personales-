@@ -58,7 +58,9 @@ export function FormularioDeuda({ id }: { id?: number }) {
   // La tasa se llena sola con la del día del préstamo hasta que el usuario la escribe o elige.
   const [tasaElegida, setTasaElegida] = useState(false);
   const [tasasDelDia, setTasasDelDia] = useState<Partial<Record<ParDolar, number>>>({});
-  const { referencia, versionHistorial } = useTasas();
+  const { versionHistorial } = useTasas();
+  // Con qué tasa se cobra (BCV por defecto): de ahí sale la tasa del día y cuántos Bs. son hoy.
+  const [par, setPar] = useState<ParDolar>('BCV');
   const [fecha, setFecha] = useState(() => new Date());
   const [fechaLimite, setFechaLimite] = useState<string | null>(null);
   const [nota, setNota] = useState('');
@@ -88,6 +90,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
         setMontoTexto(centimosATexto(d.monto));
         setTasaTexto(d.tasa_referencia ? tasaATexto(d.tasa_referencia) : '');
         setTasaElegida(d.tasa_referencia !== null);
+        setPar(d.par);
         setBilleteraId(await billeteraDeDeuda(db, id));
         setTienePagos(d.pagado > 0);
         setFecha(new Date(d.fecha));
@@ -108,14 +111,14 @@ export function FormularioDeuda({ id }: { id?: number }) {
         if (!vigente) return;
         const delDia = { BCV: bcv ?? undefined, PARALELO: usdt ?? undefined };
         setTasasDelDia(delDia);
-        const sugerida = delDia[referencia];
+        const sugerida = delDia[par];
         if (!tasaElegida && sugerida) setTasaTexto(tasaATexto(sugerida));
       })
       .catch(() => {});
     return () => {
       vigente = false;
     };
-  }, [db, dia, moneda, referencia, cargando, tasaElegida, versionHistorial]);
+  }, [db, dia, moneda, par, cargando, tasaElegida, versionHistorial]);
 
   const monto = parsearMonto(montoTexto);
   const tasa = parsearTasa(tasaTexto);
@@ -169,6 +172,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
         moneda,
         monto,
         tasa_referencia: usaTasa ? tasa : null,
+        par,
         fecha: fecha.toISOString(),
         fecha_limite: fechaLimite,
         nota,
@@ -258,6 +262,17 @@ export function FormularioDeuda({ id }: { id?: number }) {
 
         {usaTasa && (
           <View style={styles.bloque}>
+            <Text variant="labelLarge">{meDeben ? '¿A qué tasa te paga?' : '¿A qué tasa le pagas?'}</Text>
+            <SegmentedButtons
+              value={par}
+              onValueChange={(v) => {
+                setPar(v as ParDolar);
+                // La tasa de ese día pasa a ser la de la nueva elección.
+                const delDia = tasasDelDia[v as ParDolar];
+                if (delDia) setTasaTexto(tasaATexto(delDia));
+              }}
+              buttons={PARES.map((p) => ({ value: p, label: NOMBRE_PAR[p] }))}
+            />
             <TextInput
               label="¿A cuánto estaba el dólar ese día? (Bs.)"
               value={tasaTexto}
@@ -279,6 +294,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
                   onPress={() => {
                     setTasaTexto(tasaATexto(tasasDelDia[p]!));
                     setTasaElegida(true);
+                    setPar(p);
                   }}
                 >
                   {`${NOMBRE_PAR[p]} ${formatearTasa(tasasDelDia[p]!)}`}
@@ -289,7 +305,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
               <HelperText type="info">No hay tasas guardadas de ese día: escríbela a mano.</HelperText>
             )}
             {enDolares !== null && (
-              <HelperText type="info">{`Eso era ${formatearMonto(enDolares, 'USD')}. Al pagar${meDeben ? 'te' : ''}, se calcula cuántos bolívares son a la tasa de ese día.`}</HelperText>
+              <HelperText type="info">{`Eso era ${formatearMonto(enDolares, 'USD')}. Al pagar${meDeben ? 'te' : ''}, se calcula cuántos bolívares son con la tasa ${NOMBRE_PAR[par]} del día del pago.`}</HelperText>
             )}
           </View>
         )}

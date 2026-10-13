@@ -10,6 +10,7 @@ import { calcularTasa, enviadoConTasa, parsearTasa, recibidoConTasa, tasaATexto,
 import { SelectorBilletera } from './SelectorBilletera';
 import { SugerenciasTasa } from './SugerenciasTasa';
 import { useListo } from './ConfirmacionListo';
+import { useTasas } from './TasasProvider';
 
 interface Props {
   deuda: Deuda;
@@ -38,6 +39,7 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
   const [guardando, setGuardando] = useState(false);
   const [alturaTeclado, setAlturaTeclado] = useState(0);
   const { height: altoPantalla } = useWindowDimensions();
+  const { tasas } = useTasas();
 
   useEffect(() => {
     const a = Keyboard.addListener('keyboardDidShow', (e) => setAlturaTeclado(e.endCoordinates.height));
@@ -79,7 +81,9 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
   const a = devolviendo && guardadoIgualDeuda ? guardado.moneda : deuda.unidad;
   // USD y USDT se toman 1:1; con bolívares de por medio hace falta una tasa.
   const conCambio = billetera !== null && de !== a;
-  const tasaPorDefecto = conCambio && equivalentes(de, a) ? 1 : null;
+  // Bs. de una deuda llevada al dólar: se propone la tasa de hoy que se eligió para la deuda.
+  const tasaDeuda = de === 'BS' && a === 'USD' && deuda.moneda === 'BS' ? (tasas[deuda.par]?.tasa ?? null) : null;
+  const tasaPorDefecto = conCambio && equivalentes(de, a) ? 1 : tasaDeuda;
   const tasa = parsearTasa(tasaTexto) ?? tasaPorDefecto;
   const monto = parsearMonto(montoTexto);
   const equivalente = !conCambio
@@ -249,7 +253,7 @@ export function DialogoPagoDeuda({ deuda, visible, onCerrar }: Props) {
                 <TextInput
                   label={`Tasa (${unidadTasa(de, a)})`}
                   value={tasaTexto}
-                  placeholder={tasaPorDefecto ? '1' : undefined}
+                  placeholder={tasaPorDefecto ? tasaATexto(tasaPorDefecto) : undefined}
                   onChangeText={cambiarTasa}
                   keyboardType="decimal-pad"
                   mode="outlined"
