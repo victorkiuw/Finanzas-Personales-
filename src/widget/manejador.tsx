@@ -10,7 +10,9 @@ import { NOMBRE_WIDGET, WidgetFinanzas } from './WidgetFinanzas';
 async function leerDatos(): Promise<DatosWidget | null> {
   let db: SQLite.SQLiteDatabase | null = null;
   try {
-    db = await SQLite.openDatabaseAsync(NOMBRE_BD);
+    // Conexión propia: si la app está abierta, compartir su conexión hace que al cerrarla
+    // (o al liberarla el recolector de memoria) la app se quede sin base de datos.
+    db = await SQLite.openDatabaseAsync(NOMBRE_BD, { useNewConnection: true });
     return await datosWidget(db);
   } catch {
     return null;
