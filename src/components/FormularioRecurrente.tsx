@@ -2,7 +2,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Chip, HelperText, SegmentedButtons, Switch, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
@@ -21,6 +21,7 @@ import { fechaSimpleLegible } from '../lib/fechas';
 import { centimosATexto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
 import { pedirPermiso } from '../lib/notificaciones';
 import { SelectorBilletera } from './SelectorBilletera';
+import { EvitarTeclado } from './EvitarTeclado';
 
 export function FormularioRecurrente({ id }: { id?: number }) {
   const db = useSQLiteContext();
@@ -124,7 +125,7 @@ export function FormularioRecurrente({ id }: { id?: number }) {
   if (cargando) return <ActivityIndicator style={styles.cargando} />;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <EvitarTeclado style={styles.flex}>
       <Stack.Screen options={{ title: editando ? 'Editar recurrente' : 'Nuevo recurrente' }} />
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
         <SegmentedButtons
@@ -212,7 +213,7 @@ export function FormularioRecurrente({ id }: { id?: number }) {
           </Button>
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </EvitarTeclado>
   );
 }
 

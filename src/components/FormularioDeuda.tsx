@@ -2,7 +2,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
@@ -31,6 +31,7 @@ import { centimosATexto, formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, typ
 import { formatearTasa, parsearTasa, tasaATexto } from '../lib/tasa';
 import { SelectorBilletera } from './SelectorBilletera';
 import { useTasas } from './TasasProvider';
+import { EvitarTeclado } from './EvitarTeclado';
 
 const NOMBRE_CORTO: Record<Moneda, string> = { BS: 'Bolívares', USD: 'Dólares', USDT: 'USDT', EUR: 'Euros' };
 
@@ -197,7 +198,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
   const meDeben = tipo === 'ME_DEBEN';
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <EvitarTeclado style={styles.flex}>
       <Stack.Screen options={{ title: editando ? 'Editar deuda' : 'Nueva deuda o préstamo' }} />
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
         {!deAjeno && (
@@ -349,7 +350,7 @@ export function FormularioDeuda({ id }: { id?: number }) {
           Guardar
         </Button>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </EvitarTeclado>
   );
 }
 

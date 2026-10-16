@@ -2,7 +2,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, HelperText, SegmentedButtons, Switch, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
@@ -14,6 +14,7 @@ import type { DestinoPago } from '../lib/comision';
 import { ComisionPago } from './ComisionPago';
 import { PagoDesdeBilletera } from './PagoDesdeBilletera';
 import { SelectorCategoria } from './SelectorCategoria';
+import { EvitarTeclado } from './EvitarTeclado';
 
 const OPCIONES_CUOTAS = [1, 3, 6, 12];
 
@@ -130,7 +131,7 @@ export function FormularioCompraCuotas({
   if (cargando) return <ActivityIndicator style={styles.cargando} />;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <EvitarTeclado style={styles.flex}>
       <Stack.Screen options={{ title: 'Nueva compra a cuotas' }} />
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
         <TextInput label="¿Dónde compraste?" value={comercio} onChangeText={setComercio} mode="outlined" autoFocus />
@@ -238,7 +239,7 @@ export function FormularioCompraCuotas({
           Guardar compra
         </Button>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </EvitarTeclado>
   );
 }
 

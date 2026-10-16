@@ -2,7 +2,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
@@ -53,6 +53,7 @@ import { useListo } from './ConfirmacionListo';
 import { Reordenable } from './Reordenable';
 import { TecladoMonto } from './TecladoMonto';
 import { SugerenciasTasa } from './SugerenciasTasa';
+import { EvitarTeclado } from './EvitarTeclado';
 
 interface Props {
   /** Si no se indica, se crea un movimiento nuevo. */
@@ -473,7 +474,7 @@ export function FormularioMovimiento({
     !editando && tipo !== 'INGRESO' && origen && monto && monto > 0 && origen.saldo - monto - (comision ?? 0) < 0;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <EvitarTeclado style={styles.flex}>
       <Stack.Screen options={{ title: titulo }} />
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled" scrollEnabled={!moviendo}>
         <SegmentedButtons
@@ -876,7 +877,7 @@ export function FormularioMovimiento({
           </Button>
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </EvitarTeclado>
   );
 }
 

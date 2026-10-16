@@ -1,7 +1,7 @@
 import { router, Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
@@ -30,6 +30,7 @@ import { COLORES_BILLETERA, ICONOS_BILLETERA } from '../lib/tema';
 import { formatearTasa, tasaConMargen } from '../lib/tasa';
 import { EditorComision, leerComision, porcentajeATexto } from './EditorComision';
 import { useTasas } from './TasasProvider';
+import { EvitarTeclado } from './EvitarTeclado';
 
 interface Props {
   /** Si no se indica, el formulario crea una billetera nueva. */
@@ -167,7 +168,7 @@ export function FormularioBilletera({ id }: Props) {
   if (cargando) return <ActivityIndicator style={styles.cargando} />;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <EvitarTeclado style={styles.flex}>
       <Stack.Screen options={{ title: editando ? 'Editar billetera' : 'Nueva billetera' }} />
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
         <TextInput
@@ -321,7 +322,7 @@ export function FormularioBilletera({ id }: Props) {
           </View>
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </EvitarTeclado>
   );
 }
 

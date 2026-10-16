@@ -2,7 +2,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Chip, HelperText, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { ErrorValidacion, listarBilleteras, type Billetera } from '../db/billeteras';
@@ -10,6 +10,7 @@ import { actualizarDeuda, ajenoYaEnSaldo, crearDineroAjeno, LARGO_MAXIMO_PERSONA
 import { formatearFechaCorta } from '../lib/fechas';
 import { centimosATexto, formatearMonto, INFO_MONEDA, parsearMonto } from '../lib/moneda';
 import { SelectorBilletera } from './SelectorBilletera';
+import { EvitarTeclado } from './EvitarTeclado';
 
 interface Fila {
   persona: string;
@@ -117,7 +118,7 @@ export function FormularioAjeno({ id, billeteraInicial = null }: { id?: number; 
   if (cargando) return <ActivityIndicator style={styles.cargando} />;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <EvitarTeclado style={styles.flex}>
       <Stack.Screen options={{ title: editando ? 'Editar dinero de otro' : 'Le presté mi cuenta' }} />
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
         <Text variant="bodyMedium" style={{ color: tema.colors.onSurfaceVariant }}>
@@ -204,7 +205,7 @@ export function FormularioAjeno({ id, billeteraInicial = null }: { id?: number; 
           Guardar
         </Button>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </EvitarTeclado>
   );
 }
 

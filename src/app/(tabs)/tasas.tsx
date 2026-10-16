@@ -1,6 +1,6 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import {
   Button,
   Card,
@@ -23,6 +23,7 @@ import { brecha, convertirNatural, type TasasNaturales } from '../../lib/convers
 import { fechaSimpleLegible, formatearFechaCorta, haceCuanto } from '../../lib/fechas';
 import { formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../../lib/moneda';
 import { formatearTasa, parsearTasa, tasaATexto } from '../../lib/tasa';
+import { EvitarTeclado } from '../../components/EvitarTeclado';
 
 const RANGOS = [
   { dias: 30, etiqueta: '30 días' },
@@ -106,7 +107,7 @@ export default function PantallaTasas() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <EvitarTeclado style={styles.flex}>
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
         <Text variant="titleMedium">Calculadora</Text>
         <SegmentedButtons
@@ -292,7 +293,7 @@ export default function PantallaTasas() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-    </KeyboardAvoidingView>
+    </EvitarTeclado>
   );
 }
 

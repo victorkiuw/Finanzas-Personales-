@@ -2,7 +2,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, HelperText, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { ErrorValidacion } from '../db/billeteras';
@@ -18,6 +18,7 @@ import {
 import { centimosATexto, formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../lib/moneda';
 import { COLORES_BILLETERA } from '../lib/tema';
 import { fechaSimpleLegible } from '../lib/fechas';
+import { EvitarTeclado } from './EvitarTeclado';
 
 function aClaveFecha(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -114,7 +115,7 @@ export function FormularioMeta({ id }: { id?: number }) {
   if (cargando) return <ActivityIndicator style={styles.cargando} />;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <EvitarTeclado style={styles.flex}>
       <Stack.Screen options={{ title: editando ? 'Editar meta' : 'Nueva meta' }} />
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
         <TextInput
@@ -209,7 +210,7 @@ export function FormularioMeta({ id }: { id?: number }) {
           </View>
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </EvitarTeclado>
   );
 }
 
