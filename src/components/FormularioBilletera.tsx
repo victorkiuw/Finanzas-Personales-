@@ -1,0 +1,339 @@
+import { router, Stack } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Button,
+  HelperText,
+  IconButton,
+  SegmentedButtons,
+  Switch,
+  Text,
+  TextInput,
+  useTheme,
+} from 'react-native-paper';
+
+import {
+  actualizarBilletera,
+  contarMovimientos,
+  crearBilletera,
+  eliminarBilletera,
+  ErrorValidacion,
+  establecerArchivada,
+  LARGO_MAXIMO_NOMBRE,
+  obtenerBilletera,
+  type Billetera,
+} from '../db/billeteras';
+import { centimosATexto, formatearMonto, INFO_MONEDA, MONEDAS, parsearMonto, type Moneda } from '../lib/moneda';
+import { COLORES_BILLETERA, ICONOS_BILLETERA } from '../lib/tema';
+import { formatearTasa, tasaConMargen } from '../lib/tasa';
+import { EditorComision, leerComision, porcentajeATexto } from './EditorComision';
+import { useTasas } from './TasasProvider';
+import { EvitarTeclado } from './EvitarTeclado';
+
+interface Props {
+  /** Si no se indica, el formulario crea una billetera nueva. */
+  id?: number;
+}
+
+export function FormularioBilletera({ id }: Props) {
+  const db = useSQLiteContext();
+  const tema = useTheme();
+  const { tasas } = useTasas();
+  const editando = id !== undefined;
+
+  const [original, setOriginal] = useState<Billetera | null>(null);
+  const [cargando, setCargando] = useState(editando);
+  const [movimientos, setMovimientos] = useState(0);
+  const [nombre, setNombre] = useState('');
+  const [moneda, setMoneda] = useState<Moneda>('USD');
+  const [saldoTexto, setSaldoTexto] = useState('');
+  const [icono, setIcono] = useState<string>(ICONOS_BILLETERA[0]);
+  const [color, setColor] = useState<string>(COLORES_BILLETERA[0]);
+  const [comisionPct, setComisionPct] = useState('');
+  const [comisionMin, setComisionMin] = useState('');
+  // Margen del banco sobre la BCV al comprar/vender dólares, en % (vacío = no se usa).
+  const [margenTexto, setMargenTexto] = useState('');
+  const [enTotal, setEnTotal] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    if (id === undefined) return;
+    (async () => {
+      const b = await obtenerBilletera(db, id);
+      if (!b) {
+        Alert.alert('No encontrada', 'Esta billetera ya no existe.');
+        router.back();
+        return;
+      }
+      setOriginal(b);
+      setNombre(b.nombre);
+      setMoneda(b.moneda);
+      // Al editar se muestra el saldo de hoy (con todos los movimientos), no el inicial.
+      setSaldoTexto(centimosATexto(b.saldo));
+      setIcono(b.icono);
+      setColor(b.color_hex);
+      setComisionPct(porcentajeATexto(b.comision_porcentaje));
+      setComisionMin(b.comision_minima ? centimosATexto(b.comision_minima) : '');
+      setMargenTexto(b.margen_cambio === null ? '' : String(b.margen_cambio).replace('.', ','));
+      setEnTotal(b.en_total);
+      setMovimientos(await contarMovimientos(db, id));
+      setCargando(false);
+    })().catch((e) => Alert.alert('Error', String(e)));
+  }, [db, id]);
+
+  // Creando es el saldo inicial; editando, el saldo actual que se quiere tener.
+  const saldoEscrito = saldoTexto.trim() === '' ? 0 : parsearMonto(saldoTexto);
+  const margen = margenTexto.trim() === '' ? null : Number(margenTexto.trim().replace(',', '.'));
+  const margenValido = margen === null || Number.isFinite(margen);
+  const monedaBloqueada = movimientos > 0;
+
+  const guardar = async () => {
+    if (saldoEscrito === null) {
+      setError('El saldo no es un número válido.');
+      return;
+    }
+    const comision = leerComision(comisionPct, comisionMin);
+    if (!comision) {
+      setError('La comisión no es válida.');
+      return;
+    }
+    if (!margenValido) {
+      setError('El margen del banco no es un número válido.');
+      return;
+    }
+    setGuardando(true);
+    setError(null);
+    // Editando: el saldo inicial se ajusta para que el saldo de hoy sea el escrito,
+    // con los movimientos leídos justo ahora por si cambiaron mientras se editaba.
+    let balanceInicial = saldoEscrito;
+    if (id !== undefined) {
+      const actual = await obtenerBilletera(db, id);
+      if (actual) balanceInicial = saldoEscrito - (actual.saldo - actual.balance_inicial);
+    }
+    const datos = {
+      nombre,
+      moneda,
+      balance_inicial: balanceInicial,
+      icono,
+      color_hex: color,
+      comision_porcentaje: comision.porcentaje,
+      comision_minima: comision.minima,
+      // El margen solo aplica a cuentas en bolívares.
+      margen_cambio: moneda === 'BS' ? margen : null,
+      en_total: enTotal,
+    };
+    try {
+      if (id === undefined) await crearBilletera(db, datos);
+      else await actualizarBilletera(db, id, datos);
+      router.back();
+    } catch (e) {
+      if (e instanceof ErrorValidacion) setError(e.message);
+      else Alert.alert('Error', String(e));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const alternarArchivada = async () => {
+    if (id === undefined || !original) return;
+    await establecerArchivada(db, id, !original.archivada);
+    router.back();
+  };
+
+  const confirmarEliminar = () => {
+    if (id === undefined) return;
+    const mensaje = monedaBloqueada
+      ? `Tiene ${movimientos} movimiento(s), así que se archivará para conservar tu historial.`
+      : 'Esta acción no se puede deshacer.';
+    Alert.alert('¿Eliminar billetera?', mensaje, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: monedaBloqueada ? 'Archivar' : 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await eliminarBilletera(db, id);
+            router.back();
+          } catch (e) {
+            Alert.alert('Error', String(e));
+          }
+        },
+      },
+    ]);
+  };
+
+  if (cargando) return <ActivityIndicator style={styles.cargando} />;
+
+  return (
+    <EvitarTeclado style={styles.flex}>
+      <Stack.Screen options={{ title: editando ? 'Editar billetera' : 'Nueva billetera' }} />
+      <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
+        <TextInput
+          label="Nombre"
+          value={nombre}
+          onChangeText={setNombre}
+          maxLength={LARGO_MAXIMO_NOMBRE}
+          placeholder="Ej.: Banesco, Efectivo, Binance"
+          mode="outlined"
+          autoFocus={!editando}
+        />
+
+        <View>
+          <Text variant="labelLarge" style={styles.etiqueta}>
+            Moneda
+          </Text>
+          <SegmentedButtons
+            value={moneda}
+            onValueChange={(v) => setMoneda(v as Moneda)}
+            buttons={MONEDAS.map((m) => ({
+              value: m,
+              label: INFO_MONEDA[m].corto,
+              disabled: monedaBloqueada && m !== moneda,
+            }))}
+          />
+          {monedaBloqueada && (
+            <HelperText type="info">La moneda no se puede cambiar porque ya tiene movimientos.</HelperText>
+          )}
+        </View>
+
+        <View>
+          <TextInput
+            label={editando ? 'Saldo actual' : 'Saldo inicial'}
+            value={saldoTexto}
+            onChangeText={setSaldoTexto}
+            keyboardType="decimal-pad"
+            placeholder="0,00"
+            mode="outlined"
+            right={<TextInput.Affix text={INFO_MONEDA[moneda].corto} />}
+          />
+          <HelperText type={saldoEscrito === null ? 'error' : 'info'}>
+            {saldoEscrito === null
+              ? 'Número no válido'
+              : !editando
+                ? `${formatearMonto(saldoEscrito, moneda)} · lo que tenías antes de empezar a registrar`
+                : original && saldoEscrito !== original.saldo
+                  ? `Pasa de ${formatearMonto(original.saldo, moneda)} a ${formatearMonto(saldoEscrito, moneda)}: se corrige sin crear un movimiento.`
+                  : `${formatearMonto(saldoEscrito, moneda)} · con todos los movimientos hasta ahora. Si tu banco dice otro saldo, escríbelo.`}
+          </HelperText>
+        </View>
+
+        <EditorComision
+          moneda={moneda}
+          porcentajeTexto={comisionPct}
+          minimaTexto={comisionMin}
+          onCambio={(p, m) => {
+            setComisionPct(p);
+            setComisionMin(m);
+          }}
+        />
+
+        {moneda === 'BS' && (
+          <View>
+            <TextInput
+              label="Margen del banco al cambiar divisas (opcional)"
+              value={margenTexto}
+              onChangeText={setMargenTexto}
+              keyboardType="numbers-and-punctuation"
+              placeholder="Ej.: 2"
+              mode="outlined"
+              dense
+              left={<TextInput.Affix text="BCV +" />}
+              right={<TextInput.Affix text="%" />}
+            />
+            <HelperText type={margenValido ? 'info' : 'error'}>
+              {!margenValido
+                ? 'Número no válido'
+                : margen !== null && tasas.BCV
+                  ? `Al comprar o vender dólares con este banco se propondrá ${formatearTasa(tasaConMargen(tasas.BCV.tasa, margen))} Bs./USD (BCV ${formatearTasa(tasas.BCV.tasa)} ${margen >= 0 ? '+' : ''}${String(margen).replace('.', ',')} %).`
+                  : 'Si tu banco vende/compra dólares a la BCV más un margen, ponlo aquí y la app te propondrá esa tasa.'}
+            </HelperText>
+          </View>
+        )}
+
+        <View style={styles.filaSwitch}>
+          <View style={styles.flexUno}>
+            <Text variant="labelLarge">Contar en el total</Text>
+            <Text variant="bodySmall" style={{ color: tema.colors.onSurfaceVariant }}>
+              {enTotal
+                ? 'Su saldo se suma a lo disponible en Inicio.'
+                : 'Guardada aparte: no se suma a lo disponible y su saldo aparece oculto en Inicio.'}
+            </Text>
+          </View>
+          <Switch value={enTotal} onValueChange={setEnTotal} accessibilityLabel="Contar en el total" />
+        </View>
+
+        <View>
+          <Text variant="labelLarge" style={styles.etiqueta}>
+            Icono
+          </Text>
+          <View style={styles.fila}>
+            {ICONOS_BILLETERA.map((i) => (
+              <IconButton
+                key={i}
+                icon={i}
+                mode={icono === i ? 'contained' : 'outlined'}
+                selected={icono === i}
+                onPress={() => setIcono(i)}
+                accessibilityLabel={`Icono ${i}`}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View>
+          <Text variant="labelLarge" style={styles.etiqueta}>
+            Color
+          </Text>
+          <View style={styles.fila}>
+            {COLORES_BILLETERA.map((c) => (
+              <Pressable
+                key={c}
+                onPress={() => setColor(c)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: color === c }}
+                accessibilityLabel={`Color ${c}`}
+                style={[
+                  styles.color,
+                  { backgroundColor: c },
+                  color === c && { borderColor: tema.colors.onSurface, borderWidth: 3 },
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        {error && <HelperText type="error">{error}</HelperText>}
+
+        <Button mode="contained" onPress={guardar} loading={guardando} disabled={guardando}>
+          Guardar
+        </Button>
+
+        {editando && original && (
+          <View style={styles.acciones}>
+            <Button mode="outlined" icon={original.archivada ? 'archive-arrow-up' : 'archive'} onPress={alternarArchivada}>
+              {original.archivada ? 'Restaurar' : 'Archivar'}
+            </Button>
+            <Button mode="text" icon="delete" textColor={tema.colors.error} onPress={confirmarEliminar}>
+              Eliminar
+            </Button>
+          </View>
+        )}
+      </ScrollView>
+    </EvitarTeclado>
+  );
+}
+
+const styles = StyleSheet.create({
+  filaSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  flexUno: { flex: 1 },
+  flex: { flex: 1 },
+  cargando: { marginTop: 48 },
+  contenido: { padding: 16, gap: 16, paddingBottom: 48 },
+  etiqueta: { marginBottom: 8 },
+  fila: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  color: { width: 40, height: 40, borderRadius: 20, borderColor: 'transparent', borderWidth: 3 },
+  acciones: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+});

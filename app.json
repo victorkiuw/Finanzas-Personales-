@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Finanzas",
+    "slug": "finanzas-personales",
+    "scheme": "finanzas",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.victorkiuw.finanzas",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "allowBackup": true
+    },
+    "plugins": [
+      "./plugins/atajos-android.js",
+      "expo-router",
+      "expo-sqlite",
+      "expo-notifications",
+      "expo-local-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "La app usa tus fotos para adjuntar el comprobante de un pago.",
+          "cameraPermission": "La app usa la cámara para fotografiar el comprobante de un pago."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "La app usa el micrófono para que dictes tus movimientos.",
+          "speechRecognitionPermission": "La app convierte lo que dictas en un movimiento."
+        }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "Resumen",
+              "label": "Finanzas: disponible y tasas",
+              "minWidth": "250dp",
+              "minHeight": "140dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "description": "Tu dinero disponible y las tasas BCV, USDT y euro del día",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
+    ]
+  }
+}
